@@ -535,18 +535,18 @@ plotIADcurve <- function(version     = "HalfEarth",
   if (aggregation == "countries") {
 
     df   <- as.data.frame(dimSums(currCroplandSUS, dim = c(1.1, 1.2)))
-    df$IrrigArea <- "Sustainable \nIrrigation Area Potential \non current cropland \n(CUR-SUS)"
+    df$IrrigArea <- "Sustainable \nPotentially Irrigated Areas \non current cropland \n(CUR-SUS)"
 
     tmp    <- as.data.frame(dimSums(potCroplandSUS, dim = c(1.1, 1.2)))
-    tmp$IrrigArea <- "Sustainable \nIrrigation Area Potential \non potential cropland \n(POT-SUS)"
+    tmp$IrrigArea <- "Sustainable \nPotentially Irrigated Areas \non potential cropland \n(POT-SUS)"
     df <- rbind(df, tmp)
 
     tmp    <- as.data.frame(dimSums(currCroplandUNSUS, dim = c(1.1, 1.2)))
-    tmp$IrrigArea <- "Unsustainable \nIrrigation Area Potential \non current cropland \n(CUR-UNSUS)"
+    tmp$IrrigArea <- "Unsustainable \nPotentially Irrigated Areas \non current cropland \n(CUR-UNSUS)"
     df <- rbind(df, tmp)
 
     tmp    <- as.data.frame(dimSums(potCroplandUNSUS, dim = c(1.1, 1.2)))
-    tmp$IrrigArea <- "Unsustainable \nIrrigation Area Potential \non potential cropland \n(POT-UNSUS)"
+    tmp$IrrigArea <- "Unsustainable \nPotentially Irrigated Areas \non potential cropland \n(POT-UNSUS)"
     df <- rbind(df, tmp)
 
     df <- data.frame(Region = df$Region,
@@ -573,27 +573,27 @@ plotIADcurve <- function(version     = "HalfEarth",
     for (b in selectedBasins) {
       df$Value[df$Region == b] <- dimSums(currCroplandSUS[toolSelectRiverBasin(basinname = b), , ], dim = 1)
     }
-    df$Group <- "Sustainable \nIrrigation Area Potential \non current cropland \n(CUR-SUS)"
+    df$Group <- "Sustainable \nPotentially Irrigated Areas \non current cropland \n(CUR-SUS)"
 
     tmp <- framestructure
     for (b in selectedBasins) {
       tmp$Value[tmp$Region == b] <- dimSums(potCroplandSUS[toolSelectRiverBasin(basinname = b), , ], dim = 1)
     }
-    tmp$Group <- "Sustainable \nIrrigation Area Potential \non potential cropland \n(POT-SUS)"
+    tmp$Group <- "Sustainable \nPotentially Irrigated Areas \non potential cropland \n(POT-SUS)"
     df <- rbind(df, tmp)
 
     tmp <- framestructure
     for (b in selectedBasins) {
       tmp$Value[tmp$Region == b] <- dimSums(currCroplandUNSUS[toolSelectRiverBasin(basinname = b), , ], dim = 1)
     }
-    tmp$Group <- "Unsustainable \nIrrigation Area Potential \non current cropland \n(CUR-UNSUS)"
+    tmp$Group <- "Unsustainable \nPotentially Irrigated Areas \non current cropland \n(CUR-UNSUS)"
     df <- rbind(df, tmp)
 
     tmp <- framestructure
     for (b in selectedBasins) {
       tmp$Value[tmp$Region == b] <- dimSums(potCroplandUNSUS[toolSelectRiverBasin(basinname = b), , ], dim = 1)
     }
-    tmp$Group <- "Unsustainable \nIrrigation Area Potential \non potential cropland \n(POT-UNSUS)"
+    tmp$Group <- "Unsustainable \nPotentially Irrigated Areas \non potential cropland \n(POT-UNSUS)"
     df <- rbind(df, tmp)
   
     df <- data.frame(Region = df$Region,
@@ -626,7 +626,7 @@ plotIADcurve <- function(version     = "HalfEarth",
                 scale_shape_manual(values = c(19, 13, 19, 13)) +
                 scale_x_continuous(expand = c(0, 0)) +
                 scale_y_continuous(expand = c(0, 0)) +
-                xlab("Irrigation Area Potential (in Mha)") + ylab("Irrigation yield value gain (in USD/ha)") +
+                xlab("Potentially Irrigated Areas (in Mha)") + ylab("Irrigation yield value gain (in USD/ha)") +
                 theme_bw() +
                 theme(legend.title         = element_blank(),
                       legend.position      = "bottom",
@@ -710,7 +710,7 @@ wat_ag_wwEconPOTUNSUScomAg <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconPO
 # Extract reported yield value gain thresholds
 gt <- getNames(collapseNames(IrrigAreaEconACTSUScomAg[,,"on"]))
 
-## Irrigated Area (PIA = Irrigation Area Potential) [mio. ha]
+## Irrigated Area (PIA = Potentially Irrigated Areas) [mio. ha]
 i <- 0
 
 for (g in gt) {
@@ -1203,7 +1203,7 @@ plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = 
 plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
 title("(a) Currently irrigated areas", outer = FALSE, cex.main = 2.5, line = 0.5)
 
-### Graph 2: Irrigation Area Potentials (sustainable) on current cropland
+### Graph 2: Potentially Irrigated Areass (sustainable) on current cropland
 plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
 plot(b, ylim = ylim, xlim = xlim,
      legend       = FALSE,
@@ -1213,9 +1213,9 @@ plot(b, ylim = ylim, xlim = xlim,
      add          = T)
 plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
 plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
-title("(b) Irrigation area potential on current cropland", outer = FALSE, cex.main = 2.5, line = 0.5)
+title("(b) Potentially Irrigated Areas on current cropland", outer = FALSE, cex.main = 2.5, line = 0.5)
 
-### Graph 3: Irrigation Area Potentials (sustainable) on potential cropland
+### Graph 3: Potentially Irrigated Areass (sustainable) on potential cropland
 plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
 plot(c, ylim = ylim, xlim = xlim,
      legend       = FALSE,
@@ -1225,7 +1225,7 @@ plot(c, ylim = ylim, xlim = xlim,
      add          = T)
 plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
 plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
-title("(c) Irrigation area potential on potential cropland", outer = FALSE, cex.main = 2.5, line = 0.5)
+title("(c) Potentially Irrigated Areas on potential cropland", outer = FALSE, cex.main = 2.5, line = 0.5)
 
 # Legend
 plot(c, bg = "transparent",
@@ -1503,7 +1503,7 @@ axis(side = 2, cex.axis = 3, hadj = 1, padj = 0.5,
    at = c(seq(from = 0, to = 3000, by = 500)), las = 1)      # y axis
 mtext("Irrigation yield gain (in USD/ha)", side = 2, line = 7, cex = 3.5)
 mtext("Irrigated area (in Mha)", side = 1, line = 5.5, cex = 3.5)
-#title("Global \nIrrigation Area Potential \non potential cropland", cex.main = 3, line = -5, adj = 0.1)
+#title("Global \nPotentially Irrigated Areas \non potential cropland", cex.main = 3, line = -5, adj = 0.1)
 title("c)", cex.main = 4.5, line = 2, adj = 0)
 
 # Legend UNSUS
