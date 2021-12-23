@@ -1,0 +1,1754 @@
+---
+title: "Economically Efficient and Environmentally Sustainable Irrigation Potentials in 2010"
+author: "Felicitas Beier"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r Setup, include=FALSE}
+# R markdown set-up
+knitr::opts_chunk$set(echo = TRUE)
+
+# mr universe functions
+library(madrat)
+library(magclass)
+library(mrwater)
+library(mrcommons)
+
+# raster functions 
+library(raster)
+library(sp)
+
+# terra functions
+library(terra)
+library(sf) 
+
+# plot functions
+library(ggplot2)
+
+# tables for latex
+library(xtable)
+
+```
+
+```{r Settings0, include=FALSE}
+version  <- "mrwaterFullOutputs"
+year     <- "y2010"
+scenario <- "ssp2"
+
+# Path
+filepath       <- paste0(getwd(), "/inputdata/")
+inputdatapath  <- paste0(getwd(), "/inputdata/", version, "/")
+outputdatapath <- paste0(getwd(), "/outputs/")
+
+```
+
+## Current Irrigation
+
+```{r ReadinCurrent, include = FALSE, echo = FALSE}
+# Current cropland and currently irrigated areas according to LUH
+LUHarea      <- setYears(dimSums(read.magpie(paste0(inputdatapath, "cropareaLUH", ".mz")), dim = "MAG"), year)
+LUHirrigated <- collapseNames(LUHarea[, , "irrigated"])
+LUHtotal     <- dimSums(LUHarea, dim = 3)
+
+# Current irrigated area with EFR=on and off
+irrigAreaCurrent <- collapseNames(read.magpie(paste0(inputdatapath, "irrigAreaCurrent.mz"))[,,scenario][,,"irrigatable"][,,"single"])
+
+# water committed to current agricultural use (in mio. m^3) 
+watComAg     <- dimSums(read.magpie(paste0(inputdatapath, "watComAg", ".mz")), dim = "crop")
+# committed agricultural withdrawal and consumption (in mio. km^3)
+watComAgWW   <- collapseNames(watComAg[,,"withdrawal"]) / 1000 
+watComAgWC   <- collapseNames(watComAg[,,"consumption"]) / 1000
+
+# Committed agricultural fulfilled uses (in mio. km^3)
+comAgWW      <- collapseNames(read.magpie(paste0(inputdatapath, "comAguses.mz"))[,,scenario][,,"currHuman_ww"]) / 1000
+comAgWC      <- collapseNames(read.magpie(paste0(inputdatapath, "comAguses.mz"))[,,scenario][,,"currHuman_wc"]) / 1000
+comAgWCoff   <- collapseNames(comAgWC[,,"off"])
+comAgWCon    <- collapseNames(comAgWC[,,"on"])
+
+# Non-agricultural uses (in mio. km^3)
+watNonAgWW   <- collapseNames(read.magpie(paste0(inputdatapath, "nonAguses.mz"))[,,scenario][,,"currHuman_ww"]) / 1000
+watNonAgWC   <- collapseNames(read.magpie(paste0(inputdatapath, "nonAguses.mz"))[,,scenario][,,"currHuman_wc"]) / 1000
+```
+
+```{r ReportCurrentArea, include=TRUE, echo=FALSE}
+writeLines(paste0("Globally, an area of ", round(dimSums(LUHirrigated, dim = 1)), " Mha is reported to be irrigated according to LUH. \nOf these irrigated areas, ", round(dimSums(irrigAreaCurrent[,,"off"], dim = 1)), " Mha could be fulfilled \ngiven the local water availability in this study. \nIF EFR were to be maintained, it would be ", round(dimSums(irrigAreaCurrent[,,"on"], dim = 1)), " Mha.")) 
+```
+
+```{r ReportCurrentVolume, include=TRUE, echo=FALSE}
+writeLines(paste0("Globally, a consumptive water volume of ", round(dimSums(watComAgWC, dim = 1)), " km3/yr is required to irrigate \nthe given cropmix (FAO country-level production pattern of 2010) on currently irrigated areas to its full potential. \nOf these irrigation water requirements, ", round(dimSums(comAgWCoff, dim = 1)), " km3/yr could be fulfilled \ngiven the local water availability in this study. \nThis volume would be reduced to ", round(dimSums(comAgWCon, dim = 1)), " km3/yr if the EFR were to be maintained."))
+```
+
+To calculate total (un)sustainable water uses in order to compare the value with the planetary boundary, 
+the following non-agricultural uses have to be added to the Irrigation Potentials, respectively:
+
+```{r NonAgUses, include=TRUE, echo=FALSE}
+print(paste0("Global non-ag. consumption (unsustainable): ", round(dimSums(watNonAgWC[,,"off"], dim = 1)), " km^3/yr"))
+print(paste0("Global non-ag. consumption (sustainable): ", round(dimSums(watNonAgWC[,,"on"], dim = 1)), " km^3/yr"))
+```
+
+
+## Aggregated Economic Irrigation Potentials
+
+For the correct interpretation of the marginal return to irrigation,
+the committed agricultural uses river routing iteration must be switched off.
+Otherwise, these areas are pre-reserved and their reported willingness-to-pay 
+for irrigation would not represent the true value of irrigation
+in these locations. 
+
+The following section uses the results of a run with deactivated committed
+agricultural uses for the creation of country results (tables for the 
+supplementary material) and the country- and basin-level IAD curves. 
+
+```{r SCENARIOdata, include=FALSE, echo=FALSE}
+# Current irrigated area (ACTUAL)
+IrrigAreaEconACTSUS    <- read.magpie(paste0(inputdatapath, "IrrigAreaEconACTSUS", ".mz"))
+IrrigAreaEconACTUNSUS  <- read.magpie(paste0(inputdatapath, "IrrigAreaEconACTUNSUS", ".mz"))
+
+wat_ag_wcEconACTSUS    <- read.magpie(paste0(inputdatapath, "wat_ag_wcEconACTSUS", ".mz"))
+wat_ag_wcEconACTUNSUS  <- read.magpie(paste0(inputdatapath, "wat_ag_wcEconACTUNSUS", ".mz"))
+
+wat_ag_wwEconACTSUS    <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconACTSUS", ".mz"))
+wat_ag_wwEconACTUNSUS  <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconACTUNSUS", ".mz"))
+
+yieldgainareaACTunsus  <- read.magpie(paste0(inputdatapath, "yieldgainarea_actUNSUS.mz"))
+yieldgainareaACTsus    <- read.magpie(paste0(inputdatapath, "yieldgainarea_actSUS.mz"))
+
+yieldgainwaterACTunsus <- read.magpie(paste0(inputdatapath, "yieldgainwater_actUNSUS.mz")) / 1000
+yieldgainwaterACTsus   <- read.magpie(paste0(inputdatapath, "yieldgainwater_actSUS.mz")) / 1000
+
+# Current cropland area (CUR)
+IrrigAreaEconCURSUS    <- read.magpie(paste0(inputdatapath, "IrrigAreaEconCURSUS", ".mz"))
+IrrigAreaEconCURUNSUS  <- read.magpie(paste0(inputdatapath, "IrrigAreaEconCURUNSUS", ".mz"))
+
+wat_ag_wcEconCURSUS    <- read.magpie(paste0(inputdatapath, "wat_ag_wcEconCURSUS", ".mz"))
+wat_ag_wcEconCURUNSUS  <- read.magpie(paste0(inputdatapath, "wat_ag_wcEconCURUNSUS", ".mz"))
+
+wat_ag_wwEconCURSUS    <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconCURSUS", ".mz"))
+wat_ag_wwEconCURUNSUS  <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconCURUNSUS", ".mz"))
+
+yieldgainareaCURunsus  <- read.magpie(paste0(inputdatapath, "yieldgainarea_curUNSUS.mz"))
+yieldgainareaCURsus    <- read.magpie(paste0(inputdatapath, "yieldgainarea_curSUS.mz"))
+
+yieldgainwaterCURunsus <- read.magpie(paste0(inputdatapath, "yieldgainwater_curUNSUS.mz")) / 1000
+yieldgainwaterCURsus   <- read.magpie(paste0(inputdatapath, "yieldgainwater_curSUS.mz")) / 1000
+
+# Potential cropland area (POT)
+IrrigAreaEconPOTSUS    <- read.magpie(paste0(inputdatapath, "IrrigAreaEconPOTSUS", ".mz"))
+IrrigAreaEconPOTUNSUS  <- read.magpie(paste0(inputdatapath, "IrrigAreaEconPOTUNSUS", ".mz"))
+
+wat_ag_wcEconPOTSUS    <- read.magpie(paste0(inputdatapath, "wat_ag_wcEconPOTSUS", ".mz"))
+wat_ag_wcEconPOTUNSUS  <- read.magpie(paste0(inputdatapath, "wat_ag_wcEconPOTUNSUS", ".mz"))
+
+wat_ag_wwEconPOTSUS    <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconPOTSUS", ".mz"))
+wat_ag_wwEconPOTUNSUS  <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconPOTUNSUS", ".mz"))
+
+yieldgainareaPOTunsus  <- read.magpie(paste0(inputdatapath, "yieldgainarea_potUNSUS.mz"))
+yieldgainareaPOTsus    <- read.magpie(paste0(inputdatapath, "yieldgainarea_potSUS.mz"))
+
+yieldgainwaterPOTunsus <- read.magpie(paste0(inputdatapath, "yieldgainwater_potUNSUS.mz")) / 1000
+yieldgainwaterPOTsus   <- read.magpie(paste0(inputdatapath, "yieldgainwater_potSUS.mz")) / 1000
+
+```
+
+```{r OverviewTables, include=FALSE, echo=FALSE}
+# Extract reported yield value gain thresholds
+gt <- getNames(collapseNames(IrrigAreaEconACTSUS[,,"on"]))
+
+## Irrigated Area (PIA = Potentially Irrigated Areas) [mio. ha]
+i <- 0
+
+for (g in gt) {
+
+  # Actually Irrigated Land
+  data <- as.data.frame(dimSums(yieldgainareaACTunsus[,,g], dim = c(1.1, 1.2)))
+  data <- data.frame(Country = data$Region, "ACT" = data$Value, GT = g)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconACTUNSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconACTUNSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconACTSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconACTSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  # Current Cropland
+  tmp  <- as.data.frame(dimSums(yieldgainareaCURunsus[,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconCURUNSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconCURUNSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconCURSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconCURSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  # Potential cropland
+  tmp  <- as.data.frame(dimSums(yieldgainareaPOTunsus[,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconPOTUNSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconPOTUNSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconPOTSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconPOTSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  if (i == 0) {
+    PIA <- data
+  } else {
+    PIA <- rbind(PIA, data)
+  }
+  i <- i + 1
+}
+
+## Irrigated Water Consumption (PIWC = Potential Irrigation Water Consumption) [mio. m^3]
+i <- 0
+
+for (g in gt) {
+
+  # Actually Irrigated Land
+  data <- as.data.frame(dimSums(yieldgainwaterACTunsus[,,"consumption"][,,g], dim = c(1.1, 1.2)))
+  data <- data.frame(Country = data$Region, "ACT" = data$Value, GT = g)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconACTUNSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconACTUNSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconACTSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconACTSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  # Current Cropland
+  tmp  <- as.data.frame(dimSums(yieldgainwaterCURunsus[,,"consumption"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconCURUNSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconCURUNSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconCURSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconCURSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  # Potential cropland
+  tmp  <- as.data.frame(dimSums(yieldgainwaterPOTunsus[,,"consumption"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconPOTUNSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconPOTUNSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconPOTSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconPOTSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  if (i == 0) {
+    PIWC <- data
+  } else {
+    PIWC <- rbind(PIWC, data)
+  }
+  i <- i + 1
+}
+
+
+
+## Irrigated Water Withdrawals (PIWW = Irrigation Water Withdrawal Potentials) [mio. m^3]
+i <- 0
+
+for (g in gt) {
+
+  # Actually Irrigated Land
+  data <- as.data.frame(dimSums(yieldgainwaterACTunsus[,,"withdrawal"][,,g], dim = c(1.1, 1.2)))
+  data <- data.frame(Country = data$Region, "ACT" = data$Value, GT = g)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconACTUNSUS[,,"off"][,,"0"], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconACTUNSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconACTSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconACTSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  # Current Cropland
+  tmp  <- as.data.frame(dimSums(yieldgainwaterCURunsus[,,"withdrawal"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconCURUNSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconCURUNSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconCURSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconCURSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  # Potential cropland
+  tmp  <- as.data.frame(dimSums(yieldgainwaterPOTunsus[,,"withdrawal"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconPOTUNSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconPOTUNSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconPOTSUS[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconPOTSUS[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  if (i == 0) {
+    PIWW <- data
+  } else {
+    PIWW <- rbind(PIWW, data)
+  }
+  i <- i + 1
+}
+
+# Write country results to csv
+write.csv(x = PIA, 
+          file = paste0(outputdatapath, "PIA_bycountry.csv"), 
+          row.names = FALSE)
+write.csv(x = PIWW, 
+          file = paste0(outputdatapath, "PIWW_bycountry.csv"), 
+          row.names = FALSE)
+write.csv(x = PIWC, 
+          file = paste0(outputdatapath, "PIWC_bycountry.csv"),
+          row.names = FALSE)
+
+```
+
+```{r GlobalOverviewTable, include=FALSE, echo=FALSE}
+
+tmp <- NULL
+for (g in c(0, 500)) {
+  
+  global <- data.frame(Scenario = "ACT", 
+                       PIA = round(sum(PIA$ACT[PIA$GT==g])), 
+                       PIWC = round(sum(PIWC$ACT[PIWC$GT==g])), 
+                       PIWW = round(sum(PIWW$ACT[PIWW$GT==g])))
+  global <- rbind(global, 
+                  data.frame(Scenario = "ACT-UNSUS", 
+                             PIA = round(sum(PIA$ACT.UNSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$ACT.UNSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$ACT.UNSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "ACT-WATSUS", 
+                             PIA = round(sum(PIA$ACT.WATSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$ACT.WATSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$ACT.WATSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "ACT-LANDSUS", 
+                             PIA = round(sum(PIA$ACT.LANDSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$ACT.LANDSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$ACT.LANDSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "ACT-SUS", 
+                             PIA = round(sum(PIA$ACT.SUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$ACT.SUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$ACT.SUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "CUR", 
+                             PIA = round(sum(PIA$CUR[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$CUR[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$CUR[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "CUR-UNSUS", 
+                             PIA = round(sum(PIA$CUR.UNSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$CUR.UNSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$CUR.UNSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "CUR-WATSUS", 
+                             PIA = round(sum(PIA$CUR.WATSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$CUR.WATSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$CUR.WATSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "CUR-LANDSUS", 
+                             PIA = round(sum(PIA$CUR.LANDSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$CUR.LANDSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$CUR.LANDSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "CUR-SUS", 
+                             PIA = round(sum(PIA$CUR.SUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$CUR.SUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$CUR.SUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "POT", 
+                             PIA = round(sum(PIA$POT[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$POT[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$POT[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "POT-UNSUS", 
+                             PIA = round(sum(PIA$POT.UNSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$POT.UNSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$POT.UNSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "POT-WATSUS", 
+                             PIA = round(sum(PIA$POT.WATSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$POT.WATSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$POT.WATSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "POT-LANDSUS", 
+                             PIA = round(sum(PIA$POT.LANDSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$POT.LANDSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$POT.LANDSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "POT-SUS", 
+                             PIA = round(sum(PIA$POT.SUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$POT.SUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$POT.SUS[PIWW$GT==g]))))
+  
+  global$gainthreshold <- g
+  
+  tmp <- rbind(tmp, global)
+
+}
+
+global <- reshape(tmp, idvar = "Scenario", timevar = "gainthreshold", direction = "wide")
+
+print(xtable(global, type = "latex", file = "table.tex", digits = 0, align = c("l", "|l|", "r", "r", "r|", "r", "r", "r|"), label = "Tabl:IrrigationPotentials", caption = "Potentially irrigated areas (PIA), irrigation water consumption potentials (PIWC) and irrigation water withdrawal potentials (PIWW) for different scenarios. Technical irrigation potential (A) refers to the irrigation potential at a yield value gain threshold of at least 0 USD/ha. Economic irrigation potential (B) refers to the irrigation potential at a yield value gain threshold of at least 500 USD/ha"), include.rownames= FALSE)
+
+write.csv(x = global, 
+          file = paste0(outputdatapath, "Global", ".csv"), 
+          row.names = FALSE)
+```
+
+```{r IADcurveInTextNumbers, include=TRUE, echo=FALSE}
+
+# Available irrigation area on potential cropland
+avlArea <- read.magpie(paste0(inputdatapath, "avlIrrigarea_pot.mz"))
+
+### Read in data ###
+currCroplandSUS   <- collapseNames(IrrigAreaEconCURSUS[, , "on"])
+potCroplandSUS    <- collapseNames(IrrigAreaEconPOTSUS[, , "on"])
+currCroplandUNSUS <- collapseNames(IrrigAreaEconCURUNSUS[, , "off"])
+potCroplandUNSUS  <- collapseNames(IrrigAreaEconPOTUNSUS[, , "off"])
+currYieldgain1    <- read.magpie(paste0(inputdatapath, "yieldgainarea_curUNSUS.mz"))
+potYieldgain1     <- read.magpie(paste0(inputdatapath, "yieldgainarea_potUNSUS.mz"))
+
+# In-text numbers
+print(paste0("In Mexico, ", round(dimSums(LUHtotal["MEX",,], dim = 1), digits = 1), "of total cropland are available."))
+print(paste0(round(dimSums(currYieldgain1["MEX", , "500"], dim = c(1,3)), digits = 1), " would provide a yield value gain greater than 500."))
+print(paste0(round(dimSums(currCroplandSUS["MEX", , "500"], dim = c(1,3)), digits = 1), " could be sustainably irrigated."))
+print(paste0(round(dimSums(currCroplandUNSUS["MEX", , "500"], dim = c(1,3)), digits = 1), " could be unsustainably irrigated."))
+print(paste0("Currently, LUH reports ", round(dimSums(LUHirrigated["MEX",,], dim = 1), digits = 1), " to be irrigated."))
+print(paste0("Of non-protected areas in Mexico (", round(dimSums(avlArea["MEX",,], dim = 1), digits = 1), " Mha), "))
+print(paste0(round(dimSums(potYieldgain1["MEX",,"500"], dim = c(1,3)), digits = 1), " have a yield gain above 500 USD/ha,"))
+print(paste0("but only ", round(dimSums(potCroplandSUS["MEX",,"500"], dim = c(1,3)), digits = 1), " could be sustainably irrigated,"))
+print(paste0("and only ", round(dimSums(potCroplandUNSUS["MEX",,"500"], dim = c(1,3)), digits = 1), " could be unsustainably irrigated"))
+
+print(paste0("Globally, ", round(dimSums(LUHtotal, dim = 1), digits = 1), "of total cropland are available."))
+print(paste0(round(dimSums(currYieldgain1[, , "500"], dim = c(1,3)), digits = 1), " would provide a yield value gain greater than 500."))
+print(paste0(round(dimSums(currCroplandSUS[, , "500"], dim = c(1,3)), digits = 1), " could be sustainably irrigated."))
+print(paste0(round(dimSums(currCroplandUNSUS[, , "500"], dim = c(1,3)), digits = 1), " could be unsustainably irrigated."))
+print(paste0("Currently, LUH reports ", round(dimSums(LUHirrigated, dim = 1), digits = 1), " to be irrigated globally."))
+print(paste0("Of global non-protected areas (", round(dimSums(avlArea, dim = 1), digits = 1), " Mha), "))
+print(paste0(round(dimSums(potYieldgain1[,,"500"], dim = c(1,3)), digits = 1), " have a yield gain above 500 USD/ha,"))
+print(paste0("but only ", round(dimSums(potCroplandSUS[,,"500"], dim = c(1,3)), digits = 1), " could be sustainably irrigated,"))
+print(paste0("and only ", round(dimSums(potCroplandUNSUS[,,"500"], dim = c(1,3)), digits = 1), " could be unsustainably irrigated"))    
+
+```
+
+```{r IADcurveFunctionSUSvUNSUS, include=TRUE, echo=FALSE}
+    
+plotIADcurve <- function(version     = "HalfEarth",
+                         aggregation = "countries") {
+
+  ### Aggregate and rearrange data ###
+  if (aggregation == "countries") {
+
+    df   <- as.data.frame(dimSums(currCroplandSUS, dim = c(1.1, 1.2)))
+    df$IrrigArea <- "Sustainable \nIrrigation Area Potential \non current cropland \n(CUR-SUS)"
+
+    tmp    <- as.data.frame(dimSums(potCroplandSUS, dim = c(1.1, 1.2)))
+    tmp$IrrigArea <- "Sustainable \nIrrigation Area Potential \non potential cropland \n(POT-SUS)"
+    df <- rbind(df, tmp)
+
+    tmp    <- as.data.frame(dimSums(currCroplandUNSUS, dim = c(1.1, 1.2)))
+    tmp$IrrigArea <- "Unsustainable \nIrrigation Area Potential \non current cropland \n(CUR-UNSUS)"
+    df <- rbind(df, tmp)
+
+    tmp    <- as.data.frame(dimSums(potCroplandUNSUS, dim = c(1.1, 1.2)))
+    tmp$IrrigArea <- "Unsustainable \nIrrigation Area Potential \non potential cropland \n(POT-UNSUS)"
+    df <- rbind(df, tmp)
+
+    df <- data.frame(Region = df$Region,
+                     GT = as.numeric(as.character(df$Data1)),
+                     Group = df$IrrigArea,
+                     IrrigArea = df$Value,
+                     stringsAsFactors = FALSE)
+    df$LUHIrrigated <- rep(as.array(dimSums(LUHirrigated, dim = c(1.1, 1.2))), length(df$Group) / length(as.array(dimSums(LUHirrigated, dim = c(1.1, 1.2)))))
+    df$LUHCropland <- rep(as.array(dimSums(LUHtotal, dim = c(1.1, 1.2))), length(df$Group) / length(as.array(dimSums(LUHtotal, dim = c(1.1, 1.2)))))
+
+    df <- df[df$Region %in% c("CHN", "IND", "AUS", "USA", "MEX", "BRA", "ITA", "TUR", "SDN"), ]
+    df$Region <- factor(df$Region, levels = c("CHN", "IND", "AUS", "USA", "MEX", "BRA", "ITA", "TUR", "SDN"))
+    
+  } else if (aggregation == "basins") {
+
+    selectedBasins <- c("Chang Jiang", "Huang He", "Mekong",
+                        "Mississippi", "Colorado", "Murray",
+                        "Parana", "Ganges", "Indus")
+
+    framestructure <- as.data.frame(new.magpie(cells_and_regions = selectedBasins,
+                                               years = getYears(currCroplandSUS),
+                                               names = getNames(currCroplandSUS)))
+    df <- framestructure
+    for (b in selectedBasins) {
+      df$Value[df$Region == b] <- dimSums(currCroplandSUS[toolSelectRiverBasin(basinname = b), , ], dim = 1)
+    }
+    df$Group <- "Sustainable \nIrrigation Area Potential \non current cropland \n(CUR-SUS)"
+
+    tmp <- framestructure
+    for (b in selectedBasins) {
+      tmp$Value[tmp$Region == b] <- dimSums(potCroplandSUS[toolSelectRiverBasin(basinname = b), , ], dim = 1)
+    }
+    tmp$Group <- "Sustainable \nIrrigation Area Potential \non potential cropland \n(POT-SUS)"
+    df <- rbind(df, tmp)
+
+    tmp <- framestructure
+    for (b in selectedBasins) {
+      tmp$Value[tmp$Region == b] <- dimSums(currCroplandUNSUS[toolSelectRiverBasin(basinname = b), , ], dim = 1)
+    }
+    tmp$Group <- "Unsustainable \nIrrigation Area Potential \non current cropland \n(CUR-UNSUS)"
+    df <- rbind(df, tmp)
+
+    tmp <- framestructure
+    for (b in selectedBasins) {
+      tmp$Value[tmp$Region == b] <- dimSums(potCroplandUNSUS[toolSelectRiverBasin(basinname = b), , ], dim = 1)
+    }
+    tmp$Group <- "Unsustainable \nIrrigation Area Potential \non potential cropland \n(POT-UNSUS)"
+    df <- rbind(df, tmp)
+  
+    df <- data.frame(Region = df$Region,
+                     GT = as.numeric(as.character(df$Data1)),
+                     Group = df$Group,
+                     IrrigArea = df$Value,
+                     stringsAsFactors = FALSE)
+
+    tmp <- framestructure
+    for (b in selectedBasins) {
+      tmp$Value[tmp$Region == b] <- dimSums(LUHirrigated[toolSelectRiverBasin(basinname = b), , ], dim = 1)
+      tmp$Value1[tmp$Region == b] <- dimSums(LUHtotal[toolSelectRiverBasin(basinname = b), , ], dim = 1)
+    }
+    df$LUHIrrigated <- tmp$Value
+    df$LUHCropland  <- tmp$Value1
+    df$Region <- factor(df$Region, levels = selectedBasins)
+
+  } else {
+    stop("Chosen aggregation is not yet implemented")
+  }
+
+  ### Plot ###
+  out <- ggplot(df, aes(x = IrrigArea, y = GT, color = Group, group = Group, shape = Group)) +
+                geom_line(aes(linetype = Group), size = 1.5) +
+                geom_point(size = 3) +
+                geom_point(aes(x = LUHIrrigated, y = 0), size = 5, color = "black", shape = 17) +
+                facet_wrap(~Region, scales = "free_x") +
+                scale_color_manual(values = c("#1b9e77", "#d95f02", "#1b9e77", "#d95f02")) +
+                scale_linetype_manual(values = c("solid", "solid", "dashed", "dashed")) +
+                scale_shape_manual(values = c(19, 13, 19, 13)) +
+                scale_x_continuous(expand = c(0, 0)) +
+                scale_y_continuous(expand = c(0, 0)) +
+                xlab("Irrigation Area Potential (in Mha)") + ylab("Irrigation yield value gain (in USD/ha)") +
+                theme_bw() +
+                theme(legend.title         = element_blank(),
+                      legend.position      = "bottom",
+                      legend.text          = element_text(size = 12),
+                      legend.key.width     = unit(2.8, "line"),
+                      legend.justification = c(0, 1),
+                      legend.margin        = margin(t = 0, r = 0, b = 0, l = -77, unit = "pt"),
+                      strip.text           = element_text(size = 18),
+                      strip.background     = element_rect(fill = "#f6f6f6"),
+                      plot.title           = element_text(size = 18),
+                      axis.text.x          = element_text(size = 16),
+                      axis.title.x         = element_text(size = 18),
+                      axis.text.y          = element_text(size = 16),
+                      axis.title.y         = element_text(size = 18),
+                      panel.grid.major.x   = element_blank(),
+                      panel.grid.minor.x   = element_blank())
+  ggsave(paste0(outputdatapath, aggregation, "_Curves.pdf"), plot = out, width = 297, height = 210, units = "mm")
+  
+  return(out)
+}
+
+```
+
+```{r PlotAggregateFull, include=FALSE, echo=FALSE}
+
+plotIADcurve(version = version, aggregation = "countries")
+
+plotIADcurve(version = version, aggregation = "basins")
+
+```
+
+
+
+## Global Irrigation Potentials
+
+When analyzing irrigation potentials of current or historic time periods, 
+the current agricultural use reservation option should be included
+because current human water abstractions for irrigated agriculture divert 
+river flows and should be considered in the assessment of cellular discharge.
+
+The following section used a model run where the current agricultural use 
+river routing iteration is activated.
+It is the basis for the global summary table, the irrigation potential maps and
+additional country tables of the Supplementary Material. 
+
+
+```{r SCENARIOdataCOMAG, include=FALSE, echo=FALSE}
+# Current irrigated area (ACTUAL)
+IrrigAreaEconACTSUScomAg   <- read.magpie(paste0(inputdatapath, "IrrigAreaEconACTSUScomAg", ".mz"))
+IrrigAreaEconACTUNSUScomAg <- read.magpie(paste0(inputdatapath, "IrrigAreaEconACTUNSUScomAg", ".mz"))
+
+wat_ag_wcEconACTSUScomAg   <- read.magpie(paste0(inputdatapath, "wat_ag_wcEconACTSUScomAg", ".mz"))
+wat_ag_wcEconACTUNSUScomAg <- read.magpie(paste0(inputdatapath, "wat_ag_wcEconACTUNSUScomAg", ".mz"))
+
+wat_ag_wwEconACTSUScomAg   <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconACTSUScomAg", ".mz"))
+wat_ag_wwEconACTUNSUScomAg <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconACTUNSUScomAg", ".mz"))
+
+# Current cropland area (CUR)
+IrrigAreaEconCURSUScomAg   <- read.magpie(paste0(inputdatapath, "IrrigAreaEconCURSUScomAg", ".mz"))
+IrrigAreaEconCURUNSUScomAg <- read.magpie(paste0(inputdatapath, "IrrigAreaEconCURUNSUScomAg", ".mz"))
+
+wat_ag_wcEconCURSUScomAg   <- read.magpie(paste0(inputdatapath, "wat_ag_wcEconCURSUScomAg", ".mz"))
+wat_ag_wcEconCURUNSUScomAg <- read.magpie(paste0(inputdatapath, "wat_ag_wcEconCURUNSUScomAg", ".mz"))
+
+wat_ag_wwEconCURSUScomAg   <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconCURSUScomAg", ".mz"))
+wat_ag_wwEconCURUNSUScomAg <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconCURUNSUScomAg", ".mz"))
+
+# Potential cropland area (POT)
+IrrigAreaEconPOTSUScomAg   <- read.magpie(paste0(inputdatapath, "IrrigAreaEconPOTSUScomAg", ".mz"))
+IrrigAreaEconPOTUNSUScomAg <- read.magpie(paste0(inputdatapath, "IrrigAreaEconPOTUNSUScomAg", ".mz"))
+
+wat_ag_wcEconPOTSUScomAg   <- read.magpie(paste0(inputdatapath, "wat_ag_wcEconPOTSUScomAg", ".mz"))
+wat_ag_wcEconPOTUNSUScomAg <- read.magpie(paste0(inputdatapath, "wat_ag_wcEconPOTUNSUScomAg", ".mz"))
+
+wat_ag_wwEconPOTSUScomAg   <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconPOTSUScomAg", ".mz"))
+wat_ag_wwEconPOTUNSUScomAg <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconPOTUNSUScomAg", ".mz"))
+
+```
+
+```{r OverviewTablesCOMAG, include=FALSE, echo=FALSE}
+# Extract reported yield value gain thresholds
+gt <- getNames(collapseNames(IrrigAreaEconACTSUScomAg[,,"on"]))
+
+## Irrigated Area (PIA = Irrigation Area Potential) [mio. ha]
+i <- 0
+
+for (g in gt) {
+
+  # Actually Irrigated Land
+  data <- as.data.frame(dimSums(yieldgainareaACTunsus[,,g], dim = c(1.1, 1.2)))
+  data <- data.frame(Country = data$Region, "ACT" = data$Value, GT = g)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconACTUNSUScomAg[,,"off"][,,"0"], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconACTUNSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconACTSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconACTSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  # Current Cropland
+  tmp  <- as.data.frame(dimSums(yieldgainareaCURunsus[,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconCURUNSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconCURUNSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconCURSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconCURSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  # Potential cropland
+  tmp  <- as.data.frame(dimSums(yieldgainareaPOTunsus[,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconPOTUNSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconPOTUNSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconPOTSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(IrrigAreaEconPOTSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  if (i == 0) {
+    PIA <- data
+  } else {
+    PIA <- rbind(PIA, data)
+  }
+  i <- i + 1
+}
+
+## Irrigated Water Consumption (PIWC = Irrigation Water Consumption Potentials) [mio. km^3]
+i <- 0
+
+for (g in gt) {
+
+  # Actually Irrigated Land
+  data <- as.data.frame(dimSums(yieldgainwaterACTunsus[,,"consumption"][,,g], dim = c(1.1, 1.2)))
+  data <- data.frame(Country = data$Region, "ACT" = data$Value, GT = g)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconACTUNSUScomAg[,,"off"][,,"0"], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconACTUNSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconACTSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconACTSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  # Current Cropland
+  tmp  <- as.data.frame(dimSums(yieldgainwaterCURunsus[,,"consumption"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconCURUNSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconCURUNSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconCURSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconCURSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  # Potential cropland
+  tmp  <- as.data.frame(dimSums(yieldgainwaterPOTunsus[,,"consumption"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconPOTUNSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconPOTUNSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconPOTSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wcEconPOTSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  if (i == 0) {
+    PIWC <- data
+  } else {
+    PIWC <- rbind(PIWC, data)
+  }
+  i <- i + 1
+}
+
+
+
+## Irrigated Water Withdrawals (PIWW = Irrigation Water Withdrawal Potentials) [mio. km^3]
+i <- 0
+
+for (g in gt) {
+
+  # Actually Irrigated Land
+  data <- as.data.frame(dimSums(yieldgainwaterACTunsus[,,"withdrawal"][,,g], dim = c(1.1, 1.2)))
+  data <- data.frame(Country = data$Region, "ACT" = data$Value, GT = g)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconACTUNSUScomAg[,,"off"][,,"0"], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconACTUNSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconACTSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconACTSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "ACT-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  # Current Cropland
+  tmp  <- as.data.frame(dimSums(yieldgainwaterCURunsus[,,"withdrawal"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconCURUNSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconCURUNSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconCURSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconCURSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "CUR-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  # Potential cropland
+  tmp  <- as.data.frame(dimSums(yieldgainwaterPOTunsus[,,"withdrawal"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconPOTUNSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-UNSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconPOTUNSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-WATSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconPOTSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-LANDSUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  tmp  <- as.data.frame(dimSums(wat_ag_wwEconPOTSUScomAg[,,"on"][,,g], dim = c(1.1, 1.2)))
+  tmp  <- data.frame(Country = tmp$Region, "POT-SUS" = tmp$Value, GT = g)
+  data <- merge(data, tmp)
+  
+  if (i == 0) {
+    PIWW <- data
+  } else {
+    PIWW <- rbind(PIWW, data)
+  }
+  i <- i + 1
+}
+
+# Write country results to csv
+write.csv(x = PIA, 
+          file = paste0(outputdatapath, "PIA_bycountry_comAg.csv"), 
+          row.names = FALSE)
+write.csv(x = PIWW, 
+          file = paste0(outputdatapath, "PIWW_bycountry_comAg.csv"), 
+          row.names = FALSE)
+write.csv(x = PIWC, 
+          file = paste0(outputdatapath, "PIWC_bycountry_comAg.csv"),
+          row.names = FALSE)
+
+```
+
+```{r GlobalOverviewTablecomAg, include=FALSE, echo=FALSE}
+
+tmp <- NULL
+for (g in c(0, 500)) {
+  
+  global <- data.frame(Scenario = "ACT", 
+                       PIA = round(sum(PIA$ACT[PIA$GT==g])), 
+                       PIWC = round(sum(PIWC$ACT[PIWC$GT==g])), 
+                       PIWW = round(sum(PIWW$ACT[PIWW$GT==g])))
+  global <- rbind(global, 
+                  data.frame(Scenario = "ACT-UNSUS", 
+                             PIA = round(sum(PIA$ACT.UNSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$ACT.UNSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$ACT.UNSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "ACT-WATSUS", 
+                             PIA = round(sum(PIA$ACT.WATSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$ACT.WATSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$ACT.WATSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "ACT-LANDSUS", 
+                             PIA = round(sum(PIA$ACT.LANDSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$ACT.LANDSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$ACT.LANDSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "ACT-SUS", 
+                             PIA = round(sum(PIA$ACT.SUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$ACT.SUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$ACT.SUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "CUR", 
+                             PIA = round(sum(PIA$CUR[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$CUR[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$CUR[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "CUR-UNSUS", 
+                             PIA = round(sum(PIA$CUR.UNSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$CUR.UNSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$CUR.UNSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "CUR-WATSUS", 
+                             PIA = round(sum(PIA$CUR.WATSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$CUR.WATSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$CUR.WATSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "CUR-LANDSUS", 
+                             PIA = round(sum(PIA$CUR.LANDSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$CUR.LANDSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$CUR.LANDSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "CUR-SUS", 
+                             PIA = round(sum(PIA$CUR.SUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$CUR.SUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$CUR.SUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "POT", 
+                             PIA = round(sum(PIA$POT[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$POT[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$POT[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "POT-UNSUS", 
+                             PIA = round(sum(PIA$POT.UNSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$POT.UNSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$POT.UNSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "POT-WATSUS", 
+                             PIA = round(sum(PIA$POT.WATSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$POT.WATSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$POT.WATSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "POT-LANDSUS", 
+                             PIA = round(sum(PIA$POT.LANDSUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$POT.LANDSUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$POT.LANDSUS[PIWW$GT==g]))))
+  global <- rbind(global, 
+                  data.frame(Scenario = "POT-SUS", 
+                             PIA = round(sum(PIA$POT.SUS[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$POT.SUS[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$POT.SUS[PIWW$GT==g]))))
+  
+  global$gainthreshold <- g
+  
+  tmp <- rbind(tmp, global)
+
+}
+
+global <- reshape(tmp, idvar = "Scenario", timevar = "gainthreshold", direction = "wide")
+
+write.csv(x = global, 
+          file =  paste0(outputdatapath, "Global_comAg", ".csv"), 
+          row.names = FALSE)
+
+```
+
+
+## Maps
+
+The following section creates the maps using the Equal Earth projection
+to provide an equal area visualization.  
+
+```{r LandMaskTerra, include=FALSE}
+# Standard projection of MAgPIE object
+LatLonProj <- "+proj=longlat +datum=WGS84"
+# Equal Earth projection
+NewProj    <- "+proj=eqearth +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+# Map extent
+ylim       <- c(-6500000, 8300000)
+xlim       <- c(-12577316, 15581284)
+
+### Handle vector data (country shape file and land mask) with terra package ###
+# Country borders from Natural Earth Data (http://www.naturalearthdata.com/downloads/10m-cultural-vectors/). accessed on Dec. 13th 2021
+worldCountries <- terra::vect(paste0(filepath, "ne_10m_admin_0_countries.shp"))
+worldCountries <- terra::project(worldCountries, NewProj)
+
+# Create land mask for pretty continent borders
+landMask       <- terra::as.polygons(ext(worldCountries))
+landMask       <- terra::symdif(landMask, worldCountries)
+
+# Note: terra cannot transform raster object to Equal-Earth projection yet
+.toolRasterTransform <- function(x) {
+  
+  x0  <- as.RasterBrick(x)
+  out <- raster::projectRaster(x0, crs = crs(NewProj), over = TRUE)
+
+  return(out)
+}
+```
+
+For visualization purposes, areas with very little cropland area (cropland < 1 percent of cell area) are excluded from maps showing current areas.
+For maps showing potential cropland areas, areas with potential irrigation area < 1 percent of the cell area are excluded. 
+
+```{r ExclusionOfSmallAreas, include=FALSE, echo=FALSE}
+
+mapping            <- toolGetMapping("LPJ_CellBelongingsToCountries.csv", type = "cell")
+cellarea           <- (111e3 * 0.5) * (111e3 * 0.5) * cos(mapping$lat / 180 * pi) / 10000000000 # square meter -> Mha (1ha = 10000m^2)
+cellarea           <- as.magpie(cellarea, spatial = 1)
+magclass::getCells(cellarea) <- magclass::getCells(LUHtotal)
+
+# share of cropland of total cell area
+croplandcellshare <- LUHtotal / cellarea
+
+# share potentially irrigated of total cell area
+irrigcellshare    <- avlArea / cellarea
+
+```
+
+# Current Irrigation
+
+The Fulfilled-Share-Map shows the share of current irrigation water demand under full irrigation requirements (ACTUAL) that can be fulfilled by locally available renewable water resources captured in our data set (ACT-UNSUS). 
+
+```{r ReadInCurrent, include=FALSE, echo=FALSE}
+# Input data
+input <- "shrCurrIrrigFulfilled"
+
+# Read in data
+x <- collapseNames(read.magpie(paste0(inputdatapath, input, ".mz"))[, year, "off.ssp2"])
+
+# Exclude very small cropland areas
+x[croplandcellshare < 0.01] <- NA
+
+# Transform to raster for plotting
+x1 <- .toolRasterTransform(x)
+
+# Plot settings
+legendcolor  <- c("#a50026", "#d73027", "#f46d43", "#fdae61", "#fee090",
+                  "#e0f3f8", "#abd9e9", "#74add1", "#4575b4", "#313695") 
+colNA        <- "#d9d9d9"
+legendlimit  <- c(0, 1)
+legendbreaks <- seq(0, 1, 0.1)
+
+
+# Plot and save
+pdf(paste0(outputdatapath, input, ".pdf"), width = 26, height = 15)
+
+  # Main plot
+  plot(landMask, col = "white", border = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
+  plot(x1, ylim = ylim, xlim = xlim,  asp = NA, axes = FALSE, 
+       legend = FALSE,
+       col = legendcolor,
+       colNA = colNA,
+       breaks = legendbreaks,
+       add = T)
+  plot(landMask, col = "white", border = "white", ylim = ylim, xlim = xlim,  asp = NA, axes = FALSE, add = T)
+  plot(worldCountries, ylim = ylim, xlim = xlim,  asp = NA, axes = FALSE, add = T)
+  
+  # Legend
+    plot(x1,
+       legend.only   = TRUE,
+       horizontal    = TRUE,
+       col           = legendcolor,
+       breaks        = legendbreaks,
+       colNA         = colNA,
+       legend.args   = list(text = "Fulfilled Share", side = 3, font = 1, line = 2, cex = 4),
+       axis.args     = list(cex.axis = 4, at = legendbreaks, line = 0, tick = FALSE, hadj = 0.5, padj = 0.5),
+       smallplot     = c(0.4, 0.75, 0.05, 0.1),
+       add = T)
+
+
+dev.off()
+
+```
+
+
+# Technical Irrigation Potentials
+
+The Technical Irrigation Potentials map shows the irrigation potential at a yield value gain threshold of 0 on current cropland (b) and potential cropland (c) compared to actually irrigated areas according to LUH (a). 
+
+```{r PlotTechnical, include=FALSE, echo=FALSE}
+filename <- "IrrigAreaOverview"
+
+# Area correction (only show areas where there is available irrigation area > 1% of cell size)
+irrigcellshare[irrigcellshare < 0.01] <- 0
+
+a <- collapseNames(IrrigAreaEconACTSUScomAg[,,"0.off"])
+b <- collapseNames(IrrigAreaEconCURSUScomAg[,,"0.off"])
+c <- collapseNames(IrrigAreaEconPOTSUScomAg[,,"0.off"])
+
+a[irrigcellshare == 0] <- NA
+b[irrigcellshare == 0] <- NA
+c[irrigcellshare == 0] <- NA
+
+# Legend range adjustment (cell share rather than Mha)
+a <- a / cellarea
+b <- b / cellarea
+c <- c / cellarea
+legendtitle  <- "Cellshare"
+legendbreaks <- seq(0, 1, 0.1)
+legendcolor  <- c("#FFFFFF", "#f7fcb9", "#e5f5e0", "#c7e9c0", "#a1d99b", 
+                  "#74c476", "#41ab5d", "#238b45", "#006d2c", "#00441b")
+
+# Transform magpie object to raster object
+a <- .toolRasterTransform(x = a)
+b <- .toolRasterTransform(x = b)
+c <- .toolRasterTransform(x = c)
+
+jpeg(paste0(outputdatapath, filename, ".jpeg"), width = 8, height = 13.5, units = "in", res = 400)
+
+par(mar = c(3, 2, 2, 2), 
+    mfrow = c(3, 1), 
+    bg = "transparent")
+
+### Graph 1: LUH irrigated area (sustainable)
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
+plot(a, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE,
+     legend       = FALSE,
+     col          = legendcolor,
+     breaks       = legendbreaks,
+     colNA        = colNA,
+     add          = T)
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+title("(a) Currently irrigated areas", outer = FALSE, cex.main = 2.5, line = 0.5)
+
+### Graph 2: Irrigation Area Potentials (sustainable) on current cropland
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
+plot(b, ylim = ylim, xlim = xlim,
+     legend       = FALSE,
+     col          = legendcolor,
+     breaks       = legendbreaks,
+     colNA        = "#d9d9d9",
+     add          = T)
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+title("(b) Irrigation area potential on current cropland", outer = FALSE, cex.main = 2.5, line = 0.5)
+
+### Graph 3: Irrigation Area Potentials (sustainable) on potential cropland
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
+plot(c, ylim = ylim, xlim = xlim,
+     legend       = FALSE,
+     col          = legendcolor,
+     breaks       = legendbreaks,
+     colNA        = "#d9d9d9",
+     add          = T)
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+title("(c) Irrigation area potential on potential cropland", outer = FALSE, cex.main = 2.5, line = 0.5)
+
+# Legend
+plot(c, bg = "transparent",
+     legend.only   = TRUE,
+     horizontal    = TRUE,
+     col           = legendcolor,
+     breaks        = legendbreaks,
+     colNA         = "transparent",
+     legend.args   = list(text = legendtitle, side = 3, font = 1, line = 0.1, cex = 1.2),
+     axis.args     = list(cex.axis = 2, at = legendbreaks, line = 0.1, tick = FALSE, hadj = 0.5, padj = -0.1),
+     smallplot     = c(0.4, 0.75, 0.1, 0.15),
+     add = T)
+
+dev.off()
+
+```
+
+# Economic Irrigation Potentials
+
+We provide the economic irrigation maps and curves for the 
+POT-SUS as well as the POT-UNSUS scenarios.
+
+```{r ReadInEconomic, include=FALSE, echo=FALSE}
+# unsustainable land and water
+x0    <- collapseNames(IrrigAreaEconPOTUNSUS[, , "0"][, , "off"])
+x500  <- collapseNames(IrrigAreaEconPOTUNSUS[, , "500"][, , "off"])
+x1000 <- collapseNames(IrrigAreaEconPOTUNSUS[, , "1000"][, , "off"])
+
+# sustainable land and water
+x0sus    <- collapseNames(IrrigAreaEconPOTSUS[, , "0"][, , "on"])
+x500sus  <- collapseNames(IrrigAreaEconPOTSUS[, , "500"][, , "on"])
+x1000sus <- collapseNames(IrrigAreaEconPOTSUS[, , "1000"][, , "on"])
+  
+```
+
+```{r PlotEconomicPrep, include=FALSE, echo=FALSE}
+filename <- "MapEconOfIrrig"
+
+# SUS
+potCropland1sus           <- dimSums(collapseNames(IrrigAreaEconPOTSUS[, , "on"]), dim = 1)
+getCells(potCropland1sus) <- "GLO"
+potCropland1sus           <- data.frame(y = as.numeric(as.character(as.data.frame(potCropland1sus)$Data1)),
+                                   x = as.data.frame(potCropland1sus)$Value, stringsAsFactors = FALSE)
+
+# For curve plot
+x  <- potCropland1sus$x
+y  <- potCropland1sus$y
+a1sus <- x[y >= 1000]
+b1sus <- y[x == x[y >= 1000]]
+a2sus <- x[y <= 1000 & y >= 500]
+b2sus <- y[x == x[y <= 1000 & y >= 500]]
+a3sus <- x[y <= 500]
+b3sus <- y[x == x[y <= 500]]
+
+# UNSUS
+potCropland1           <- dimSums(collapseNames(IrrigAreaEconPOTUNSUS[, , "off"]), dim = 1)
+getCells(potCropland1) <- "GLO"
+potCropland1           <- data.frame(y = as.numeric(as.character(as.data.frame(potCropland1)$Data1)),
+                                   x = as.data.frame(potCropland1)$Value, stringsAsFactors = FALSE)
+
+# For curve plot
+x  <- potCropland1$x
+y  <- potCropland1$y
+a1 <- x[y >= 1000]
+b1 <- y[x == x[y >= 1000]]
+a2 <- x[y <= 1000 & y >= 500]
+b2 <- y[x == x[y <= 1000 & y >= 500]]
+a3 <- x[y <= 500]
+b3 <- y[x == x[y <= 500]]
+
+
+# PIA
+x0[x0 == 0]       <- NA
+x500[x500 == 0]   <- NA
+x1000[x1000 == 0] <- NA
+
+x0sus[x0sus == 0]       <- NA
+x500sus[x500sus == 0]   <- NA
+x1000sus[x1000sus == 0] <- NA
+
+# Area correction for map plot
+x0[irrigcellshare == 0]    <- NA
+x500[irrigcellshare == 0]  <- NA
+x1000[irrigcellshare == 0] <- NA
+
+x0sus[irrigcellshare == 0]    <- NA
+x500sus[irrigcellshare == 0]  <- NA
+x1000sus[irrigcellshare == 0] <- NA
+
+# Legend range adjustment
+x0Share    <- x0 / cellarea
+x500Share  <- x500 / cellarea
+x1000Share <- x1000 / cellarea
+
+x0Sharesus    <- x0sus / cellarea
+x500Sharesus  <- x500sus / cellarea
+x1000Sharesus <- x1000sus / cellarea
+
+legendtitle  <- "Cellshare"
+legendbreaks <- seq(0, 1, 0.25)
+
+### Create and save Legend plot ###
+x0_000_025 <- sum(x0[x0Share<0.25 & is.na(x500) & is.na(x1000)], na.rm = TRUE)
+x0_025_050 <- sum(x0[x0Share>=0.25 & x0Share<0.5 & is.na(x500) & is.na(x1000)], na.rm = TRUE)
+x0_050_075 <- sum(x0[x0Share>=0.5 & x0Share<0.75 & is.na(x500) & is.na(x1000)], na.rm = TRUE)
+x0_075_010 <- sum(x0[x0Share>=0.75 & is.na(x500) & is.na(x1000)], na.rm = TRUE)
+
+x500_000_025 <- sum(x500[x500Share<0.25 & is.na(x1000)], na.rm = TRUE)
+x500_025_050 <- sum(x500[x500Share>=0.25 & x500Share<0.5 & is.na(x1000)], na.rm = TRUE)
+x500_050_075 <- sum(x500[x500Share>=0.5 & x500Share<0.75 & is.na(x1000)], na.rm = TRUE)
+x500_075_010 <- sum(x500[x500Share>=0.75 & is.na(x1000)], na.rm = TRUE)
+
+x1000_000_025 <- sum(x1000[x1000Share<0.25], na.rm = TRUE)
+x1000_025_050 <- sum(x1000[x1000Share>=0.25 & x1000Share<0.5], na.rm = TRUE)
+x1000_050_075 <- sum(x1000[x1000Share>=0.5 & x1000Share<0.75], na.rm = TRUE)
+x1000_075_010 <- sum(x1000[x1000Share>=0.75], na.rm = TRUE)
+
+x0_000_025sus <- sum(x0sus[x0Sharesus<0.25 & is.na(x500sus) & is.na(x1000sus)], na.rm = TRUE)
+x0_025_050sus <- sum(x0sus[x0Sharesus>=0.25 & x0Sharesus<0.5 & is.na(x500sus) & is.na(x1000sus)], na.rm = TRUE)
+x0_050_075sus <- sum(x0sus[x0Sharesus>=0.5 & x0Sharesus<0.75 & is.na(x500sus) & is.na(x1000sus)], na.rm = TRUE)
+x0_075_010sus <- sum(x0sus[x0Sharesus>=0.75 & is.na(x500sus) & is.na(x1000sus)], na.rm = TRUE)
+
+x500_000_025sus <- sum(x500sus[x500Sharesus<0.25 & is.na(x1000sus)], na.rm = TRUE)
+x500_025_050sus <- sum(x500sus[x500Sharesus>=0.25 & x500Sharesus<0.5 & is.na(x1000sus)], na.rm = TRUE)
+x500_050_075sus <- sum(x500sus[x500Sharesus>=0.5 & x500Sharesus<0.75 & is.na(x1000sus)], na.rm = TRUE)
+x500_075_010sus <- sum(x500sus[x500Sharesus>=0.75 & is.na(x1000sus)], na.rm = TRUE)
+
+x1000_000_025sus <- sum(x1000sus[x1000Sharesus<0.25], na.rm = TRUE)
+x1000_025_050sus <- sum(x1000sus[x1000Sharesus>=0.25 & x1000Sharesus<0.5], na.rm = TRUE)
+x1000_050_075sus <- sum(x1000sus[x1000Sharesus>=0.5 & x1000Sharesus<0.75], na.rm = TRUE)
+x1000_075_010sus <- sum(x1000sus[x1000Sharesus>=0.75], na.rm = TRUE)
+
+colors <- c("#e5f5e0", "#a1d99b", "#238b45", "#00441b",
+          "#deebf7", "#9ecae1", "#4292c6", "#08306b",
+          "#fee0d2", "#fc9272", "#cb181d", "#67000d")
+values <- c(x0_000_025, x0_025_050, x0_050_075, x0_075_010,
+          x500_000_025, x500_025_050, x500_050_075, x500_075_010,
+          x1000_000_025, x1000_025_050, x1000_050_075, x1000_075_010)
+
+valuessus <- c(x0_000_025sus, x0_025_050sus, x0_050_075sus, x0_075_010sus,
+          x500_000_025sus, x500_025_050sus, x500_050_075sus, x500_075_010sus,
+          x1000_000_025sus, x1000_025_050sus, x1000_050_075sus, x1000_075_010sus)
+
+.boxes <- function(position = c(0, 0, 0.25, 1), color = "#e5f5e0", text = "some Mha") {
+
+rect(position[1], position[2], position[3], position[4], border = "black", col = color)
+text(mean(c(position[1], position[3])), mean(c(position[2], position[4])), text, cex = 3.5)
+
+}
+
+# Transform magpie object to raster object
+x0Share        <- .toolRasterTransform(x0Share)
+x500Share      <- .toolRasterTransform(x500Share)
+x1000Share     <- .toolRasterTransform(x1000Share)
+
+x0Sharesus        <- .toolRasterTransform(x0Sharesus)
+x500Sharesus      <- .toolRasterTransform(x500Sharesus)
+x1000Sharesus     <- .toolRasterTransform(x1000Sharesus)
+```
+
+```{r PlotEconomicUNSUS, include=FALSE, echo=FALSE}
+### Create and save Map plot for UNSUS scenario ###
+jpeg(paste0(outputdatapath, filename, "_a.jpeg"), width = 200, height = 120, units = "mm", res = 400)
+
+# Plot Map
+par(mar = c(0, 0, 0, 0), oma = c(0, 0, 0, 0))
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, 
+     axes = FALSE)
+
+plot(x0Share, bg = "transparent", ylim = ylim, xlim = xlim, asp = NA, 
+     axes = FALSE,
+     legend       = FALSE,
+     col          = c("#e5f5e0", "#a1d99b", "#238b45", "#00441b"), # green color scale
+     breaks       = legendbreaks,
+     colNA        = NA,
+     add = T)
+
+plot(x500Share, bg = "transparent", ylim = ylim, xlim = xlim, asp = NA, 
+     axes = FALSE,
+     legend       = FALSE,
+     col          = c("#deebf7", "#9ecae1", "#4292c6", "#08306b"), # blue color scale
+     breaks       = legendbreaks,
+     colNA        = NA,
+     add          = T)
+
+plot(x1000Share, bg = "transparent", ylim = ylim, xlim = xlim, asp = NA, 
+     axes = FALSE,
+     legend       = FALSE,
+     col          = c("#fee0d2", "#fc9272", "#cb181d", "#67000d"), # red color scale
+     breaks       = legendbreaks,
+     colNA        = NA,
+     add          = T)
+
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+
+title("a) POT-UNSUS", cex.main = 1.5, line = 0.5, adj = 0)
+
+dev.off()
+```
+
+```{r PlotEconomicSUS, include=FALSE, echo=FALSE}
+### Create and save Map plot for SUS scenario ###
+jpeg(paste0(outputdatapath, filename, "_b.jpeg"), width = 200, height = 120, units = "mm", res = 400)
+
+# Plot Map
+par(mar = c(0, 0, 0, 0), oma = c(0, 0, 0, 0))
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
+
+plot(x0Sharesus, bg = "transparent", ylim = ylim, xlim = xlim,
+     asp = NA, axes = FALSE,
+     legend       = FALSE,
+     col          = c("#e5f5e0", "#a1d99b", "#238b45", "#00441b"), # green color scale
+     breaks       = legendbreaks,
+     colNA        = NA,
+     add = T)
+
+plot(x500Sharesus, bg = "transparent", ylim = ylim, xlim = xlim,
+     asp = NA, axes = FALSE,
+     legend       = FALSE,
+     col          = c("#deebf7", "#9ecae1", "#4292c6", "#08306b"), # blue color scale
+     breaks       = legendbreaks,
+     colNA        = NA,
+     add          = T)
+
+plot(x1000Sharesus, bg = "transparent", ylim = ylim, xlim = xlim,
+     asp = NA, axes = FALSE,
+     legend       = FALSE,
+     col          = c("#fee0d2", "#fc9272", "#cb181d", "#67000d"), # red color scale
+     breaks       = legendbreaks,
+     colNA        = NA,
+     add          = T)
+
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+
+title("b) POT-SUS", cex.main = 1.5, line = 0.5, adj = 0)
+
+dev.off()
+```
+
+```{r PlotEconomicCurve, include=FALSE, echo=FALSE}
+# Curve Plot
+pdf(paste0(outputdatapath, filename, "_c.pdf"), height = 9, width = 26)
+
+par(fig = c(0.03, 0.45, 0, 1), bg = "white", new = FALSE,
+  mar = c(7, 7, 5, 1), xaxs = "i", yaxs = "i")
+plot(x, y, bg = "white",
+   col = ifelse(y > 1000, "#cb181d", ifelse(y > 500, "#08306b", "#238b45")),
+   main = "",
+   xlab = "",
+   ylab = "",
+   cex.lab = 3.5,
+   type = "p", pch = 19, lty = 1, lwd = 2.5,
+   bty = "l", yaxt = "n", xaxt = "n")
+s <- seq(length(a1)-1)
+segments(a1[s], b1[s], a1[s+1], b1[s+1], col= "#cb181d", lwd = 8)
+s <- seq(length(a2)-1)
+segments(a2[s], b2[s], a2[s+1], b2[s+1], col= "#08306b", lwd = 8)
+s <- seq(length(a3)-1)
+segments(a3[s], b3[s], a3[s+1], b3[s+1], col= "#238b45", lwd = 8)
+text(1000, 750, "POT-UNSUS", col = "black", cex = 3)
+
+s <- seq(length(a1sus)-1)
+segments(a1sus[s], b1sus[s], a1sus[s+1], b1sus[s+1], col= "#fc9272", lwd = 8)
+s <- seq(length(a2sus)-1)
+segments(a2sus[s], b2sus[s], a2sus[s+1], b2sus[s+1], col= "#9ecae1", lwd = 8)
+s <- seq(length(a3sus)-1)
+segments(a3sus[s], b3sus[s], a3sus[s+1], b3sus[s+1], col= "#a1d99b", lwd = 8)
+text(450, 300, "POT-SUS", col = "black", cex = 3)
+
+axis(side = 1, cex.axis = 3, hadj = 0.5, padj = 0.5,
+   at = c(seq(from = 0, to = max(potCropland1$x),by = 200))) # x axis
+axis(side = 2, cex.axis = 3, hadj = 1, padj = 0.5,
+   at = c(seq(from = 0, to = 3000, by = 500)), las = 1)      # y axis
+mtext("Irrigation yield gain (in USD/ha)", side = 2, line = 7, cex = 3.5)
+mtext("Irrigated area (in Mha)", side = 1, line = 5.5, cex = 3.5)
+#title("Global \nIrrigation Area Potential \non potential cropland", cex.main = 3, line = -5, adj = 0.1)
+title("c)", cex.main = 4.5, line = 2, adj = 0)
+
+# Legend UNSUS
+par(mar = c(1, 1, 1, 1), fig = c(0.5, 0.98, 0.6, 0.9), new = TRUE)
+plot(c(0, 1), c(0, 3), type = "n", xlab = "", ylab = "", axes = FALSE)
+axis(side = 1, col = NA, col.ticks = NA, at = legendbreaks, cex.axis = 3, padj = 0.6)
+axis(side = 2, col = NA, col.ticks = NA, at = c(1, 2, 3), cex.axis = 3,
+   hadj = 1, padj = 1.4, c(">0-500 USD/ha", ">500-1000 USD/ha", ">1000 USD/ha"), las = 2)
+mtext("POT-UNSUS", side = 3, line = 0.5, cex = 3.8)
+
+i <- 0
+for (threshold in c(1, 2, 3)) {
+for (share in c(0.25, 0.5, 0.75, 1)) {
+  i <- i + 1
+  .boxes(position = c(share-0.25, threshold-1, share, threshold),
+         color = colors[i], text = paste0(round(values[i]), " Mha"))
+ }
+}
+
+# Legend SUS
+par(mar = c(1, 1, 1, 1), fig = c(0.5, 0.98, 0.15, 0.45), new = TRUE)
+plot(c(0, 1), c(0, 3), type = "n", xlab = "", ylab = "", axes = FALSE)
+axis(side = 1, col = NA, col.ticks = NA, at = legendbreaks, cex.axis = 3, padj = 0.6)
+axis(side = 2, col = NA, col.ticks = NA, at = c(1, 2, 3), cex.axis = 3,
+   hadj = 1, padj = 1.4, c(">0-500 USD/ha", ">500-1000 USD/ha", ">1000 USD/ha"), las = 2)
+mtext("Cell share", side = 1, line = 6, cex = 3.8)
+mtext("POT-SUS", side = 3, line = 0.5, cex = 3.8)
+i <- 0
+for (threshold in c(1, 2, 3)) {
+for (share in c(0.25, 0.5, 0.75, 1)) {
+  i <- i + 1
+  .boxes(position = c(share-0.25, threshold-1, share, threshold),
+         color = colors[i], text = paste0(round(valuessus[i]), " Mha"))
+ }
+}
+
+dev.off()
+
+```
+
+
+# Supplementary Material
+
+## Discharge Accessibility
+
+The more variable the discharge, the harder it is accessible to humans. This graph visualizes the relationship between discharge and accessibility.
+
+```{r FunctionalRelationshipGraph, include=FALSE, echo=FALSE}
+# Inputdata
+input <- "LPJmL_monthlyDischarge"
+
+# Read in data
+monthlyD <- read.magpie(paste0(inputdatapath, input, ".mz"))
+coeff    <- 2
+
+# Extract years
+years <- getYears(monthlyD, as.integer = TRUE)
+if (class(year) != "numeric") {
+  year <- as.numeric(gsub("y", "", year))
+}
+
+for (y in year) {
+
+  # Long-term reference time frame for discharge variability calculation
+  if ((y - 30) > years[1]) {
+    longterm_period <- seq(y - 30, y, by = 1)
+  } else {
+    longterm_period <- seq(1980, 2010, by = 1)
+  }
+  monthly_discharge <- monthlyD[, longterm_period, ]
+
+  # Transform to array (faster calculation)
+  monthly_discharge <- as.array(collapseNames(monthly_discharge))
+
+  ### Variation Coefficient Method ###
+  # Mean and standard deviation of discharge
+  mean_discharge <- apply(monthly_discharge, MARGIN = 1, mean)
+  std_discharge  <- apply(monthly_discharge, MARGIN = 1, sd)
+
+  # Coefficient of Variation
+  cv <- ifelse(mean_discharge > 0, std_discharge / mean_discharge, 0)
+}
+
+x <- seq(min(cv), max(cv), by = 1)
+
+### Create and save plot ###
+pdf(paste0("outputs/AccessibilityRule.pdf"), height = 21.0, width = 29.7, paper = "a4r")
+par(mfrow = c(2, 1),
+    mar = c(4.1, 4.1, 4.1, 2.1))
+
+hist(cv, breaks = 100, main = NULL,
+     xlab = "Coefficient of variation of monthly discharge (std.deviation/mean)",
+     ylab = "Frequency (Number of grid cells)",
+      #ylim = c(0,19),
+     yaxs = "i",
+    col = "lightblue")
+axis(side = 1, at = seq(min(cv), max(cv), by = 1)) # x axis
+title("(a)", adj = 0)
+
+plot(coeff^(-x),
+   type = "l",
+   xlab = "Coefficient of variation of monthly discharge (std.deviation/mean)",
+   ylab = "Accessible share of discharge",
+   cex.lab = 1,
+   xlim = c(min(x), max(x)), ylim = c(0, 1),
+   #xaxs = "i",
+   yaxs = "i",
+   lwd = 4, col = "blue")
+axis(side = 1, at = seq(min(cv), max(cv), by = 1)) # x axis
+axis(side = 2, at = seq(0, 1, by = 0.1))  # y axis
+title("(b)", adj = 0)
+
+dev.off()
+
+```
+
+## Protected Areas according to Half Earth Scenario
+
+```{r ProtectedAreaReadin, include=TRUE, echo=FALSE}
+potlandUnprotect <- read.magpie(paste0(inputdatapath, "avlIrrigarea_pot.mz"))
+
+print(paste0("Non-protected areas that are suitable for cropland activities: ", dimSums(potlandUnprotect, dim = 1)))
+```
+
+The Protected Areas map shows the share of each grid cell that is protected following the Half Earth scenario. 
+
+```{r HalfEarth, include=FALSE, echo=FALSE}
+protectSCEN <- "HalfEarth"
+
+# Read in data
+protectArea <- collapseNames(read.magpie(paste0(inputdatapath, "protectedAreas.mz"))[, , protectSCEN])
+
+# Cell share that is protected
+protectArea <- protectArea / cellarea
+protectArea[protectArea > 1] <- 1
+
+# Plot Fulfilled Share
+legendtitle  <- "Protected Share"
+legendbreaks <- seq(0, 1, 0.1)
+legendcolor  <- c("#FFFFFF", "#f7fcb9", "#e5f5e0", "#c7e9c0", "#a1d99b",
+                  "#74c476", "#41ab5d", "#238b45", "#006d2c", "#00441b")
+
+# Transform magpie object to raster object
+protectArea <- .toolRasterTransform(protectArea)
+# correct rounding
+protectArea[protectArea < 0] <- 0
+protectArea[protectArea > 1] <- 1
+
+jpeg(paste0(outputdatapath, "ProtectArea", ".jpeg"), width = 8, height = 4.5, units = "in", res = 400)
+
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
+plot(protectArea, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE,
+     legend       = FALSE,
+     col          = legendcolor,
+     breaks       = legendbreaks,
+     colNA        = colNA,
+     add          = T)
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+
+# Legend
+plot(protectArea, bg = "transparent",
+     legend.only   = TRUE,
+     horizontal    = TRUE,
+     col           = legendcolor,
+     breaks        = legendbreaks,
+     colNA         = "transparent",
+     legend.args   = list(text = legendtitle, side = 3, font = 1, line = 0.5, cex = 1),
+     axis.args     = list(cex.axis = 1, at = legendbreaks, line = 0, tick = FALSE, hadj = 0.4, padj = -1.2),
+     smallplot     = c(0.4, 0.75, 0.1, 0.15),
+     add = T)
+
+dev.off()
+
+```
+
+## Yield gain (in USD/ha)
+
+```{r YieldGain, include=TRUE, echo=FALSE}
+
+# Read in data
+yieldGain   <- dimSums(read.magpie(paste0(inputdatapath, "yieldgain_USDha", ".mz")), dim = 3)
+getSets(yieldGain) <- c("x", "y", "iso", "year", "data")
+
+# Dummy variables for land extent:
+tmpIrrig                      <- LUHirrigated
+tmpIrrig[tmpIrrig != 0]       <- 1
+tmpIrrig                      <- yieldGain * tmpIrrig
+
+tmpCropland                   <- LUHtotal
+tmpCropland[tmpCropland != 0] <- 1
+tmpCropland                   <- yieldGain * tmpCropland
+
+tmpPotTotal                   <- collapseNames(yieldgainareaPOTunsus[,,"0"])
+tmpPotTotal[tmpPotTotal != 0] <- 1
+tmpPotTotal                   <- yieldGain * tmpPotTotal
+
+tmpPotSus                     <- collapseNames(yieldgainareaPOTsus[,,"0"])
+tmpPotSus[tmpPotSus != 0]     <- 1
+tmpPotSus                     <- yieldGain * tmpPotSus
+
+# In-text numbers (global)
+writeLines(paste0("The average yield value gain on currently irrigated areas is ", round(mean(tmpIrrig), digits = 1), "USD per hectare. \nIt ranges between ", round(min(tmpIrrig)), " and ", round(max(tmpIrrig)), "USD per hectare. The median is: ", round(median(tmpIrrig)), ". ",
+"\nThe average yield value gain on current cropland is ", round(mean(tmpCropland), digits = 1), "hectare. \nIt ranges between ", round(min(tmpCropland)), " and ", round(max(tmpCropland)), "USD per hectare. The median is: ", round(median(tmpCropland)), ". ", 
+"\nThe average yield value gain on total potential cropland is ", round(mean(tmpPotTotal), digits = 1), ". \nIt ranges between ", round(min(tmpPotTotal)), " and ", round(max(tmpPotTotal)), "USD per hectare. The median is: ", round(median(tmpPotTotal)), ". ", 
+"\nThe average yield value gain on potential (unprotected) cropland is ", round(mean(tmpPotSus), digits = 1), ". \nIt ranges between ", round(min(tmpPotSus)), " and ", round(max(tmpPotSus)), "USD per hectare. The median is: ", round(median(tmpPotSus)), ". "))
+
+# Set 0 to NA:
+yieldGain[yieldGain <= 0] <- NA
+
+# Legend
+legendbreaks <- c(0, 100, 300, 500, 700, 900, 1000)
+legendcolor <- c("#FFFFFF", "#fdbb84", "#fc8d59", "#d7301f", "#b30000", "#7f0000")
+
+# Transform magpie object to raster object
+yieldGain <- .toolRasterTransform(yieldGain)
+
+yieldGain[yieldGain < 0]     <- 0
+yieldGain[yieldGain >= 1000] <- 999
+
+jpeg(paste0(outputdatapath, "Yields", ".jpeg"), width = 8, height = 4.5, units = "in", res = 400)
+
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
+plot(yieldGain, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE,
+     legend       = FALSE,
+     col          = legendcolor,
+     breaks       = legendbreaks,
+     colNA        = colNA,
+     add          = T)
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+
+# Legend
+plot(yieldGain, bg = "transparent",
+     legend.only   = TRUE,
+     horizontal    = TRUE,
+     col           = legendcolor,
+     breaks        = legendbreaks,
+     colNA         = "transparent",
+     legend.args   = list(text = "USD per ha", side = 3, font = 1, line = 0.5, cex = 1),
+     axis.args     = list(cex.axis = 0.8, at = legendbreaks, line = 0, tick = FALSE, hadj = 0.4, padj = -1.5),
+     smallplot     = c(0.4, 0.75, 0.1, 0.15),
+     add = T)
+
+dev.off()
+
+```
+
