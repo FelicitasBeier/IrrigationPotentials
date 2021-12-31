@@ -384,13 +384,13 @@ for (g in gt) {
 
 # Write country results to csv
 write.csv(x = PIA, 
-          file = paste0(outputdatapath, "PIA_bycountry.csv"), 
+          file = paste0(outputdatapath, "PIA_bycountry_b.csv"), 
           row.names = FALSE)
 write.csv(x = PIWW, 
-          file = paste0(outputdatapath, "PIWW_bycountry.csv"), 
+          file = paste0(outputdatapath, "PIWW_bycountry_b.csv"), 
           row.names = FALSE)
 write.csv(x = PIWC, 
-          file = paste0(outputdatapath, "PIWC_bycountry.csv"),
+          file = paste0(outputdatapath, "PIWC_bycountry_b.csv"),
           row.names = FALSE)
 
 ```
@@ -939,13 +939,13 @@ for (g in gt) {
 
 # Write country results to csv
 write.csv(x = PIA, 
-          file = paste0(outputdatapath, "PIA_bycountry_comAg.csv"), 
+          file = paste0(outputdatapath, "PIA_bycountry_a.csv"), 
           row.names = FALSE)
 write.csv(x = PIWW, 
-          file = paste0(outputdatapath, "PIWW_bycountry_comAg.csv"), 
+          file = paste0(outputdatapath, "PIWW_bycountry_a.csv"), 
           row.names = FALSE)
 write.csv(x = PIWC, 
-          file = paste0(outputdatapath, "PIWC_bycountry_comAg.csv"),
+          file = paste0(outputdatapath, "PIWC_bycountry_a.csv"),
           row.names = FALSE)
 
 ```
