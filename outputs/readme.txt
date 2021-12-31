@@ -1,0 +1,1 @@
+The outputs folder contains the files created by the mrwater_CurrentIrrigationPotentials.Rmd
