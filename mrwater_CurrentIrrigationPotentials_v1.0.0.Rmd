@@ -32,7 +32,7 @@ library(xtable) # latex
 ```
 
 ```{r Settings0, include=FALSE}
-version  <- "mrwaterFullOutputs_GLOprices"
+version  <- "mrwaterFullOutputs_31-12-2021"
 year     <- "y2010"
 scenario <- "ssp2"
 
@@ -48,12 +48,12 @@ outputdatapath <- paste0(getwd(), "/outputs/", version, "/")
 ```{r ReadinCurrent, include = FALSE, echo = FALSE}
 # Current cropland and currently irrigated areas according to LUH
 LUHarea      <- setYears(dimSums(collapseNames(read.magpie(paste0(inputdatapath, "cropareaLUH", ".mz"))), 
-                                 dim = "crop"), year) 
+                                 dim = "MAG"), year)
 LUHirrigated <- collapseNames(LUHarea[, , "irrigated"])
-LUHtotal     <- dimSums(LUHarea, dim = "irrigation")
+LUHtotal     <- dimSums(LUHarea, dim = 3)
 
 # Current irrigated area with EFR=on and off
-irrigAreaCurrent <- collapseNames(read.magpie(paste0(inputdatapath, "irrigAreaCurrent.mz"))[,,scenario][,,"irrigatable"])
+irrigAreaCurrent <- collapseNames(read.magpie(paste0(inputdatapath, "irrigAreaCurrent.mz"))[,,scenario][,,"irrigatable"][,,"single"])
 
 # water committed to current agricultural use (in mio. m^3) 
 watComAg     <- dimSums(read.magpie(paste0(inputdatapath, "watComAg", ".mz")), dim = "crop")
@@ -150,97 +150,7 @@ yieldgainareaPOTsus    <- read.magpie(paste0(inputdatapath, "yieldgainarea_potSU
 yieldgainwaterPOTunsus <- read.magpie(paste0(inputdatapath, "yieldgainwater_potUNSUS.mz")) / 1000
 yieldgainwaterPOTsus   <- read.magpie(paste0(inputdatapath, "yieldgainwater_potSUS.mz")) / 1000
 
-#### <ToDo> Replace dimension name in code!!
-#yieldgainwaterPOTunsus <- dimSums(yieldgainwaterPOTunsus, dim = 3.3)
-#yieldgainwaterPOTsus <- dimSums(yieldgainwaterPOTsus, dim = 3.3)
-#yieldgainwaterCURunsus <- dimSums(yieldgainwaterCURunsus, dim = 3.3)
-#yieldgainwaterCURsus <- dimSums(yieldgainwaterCURsus, dim = 3.3)
-#yieldgainwaterACTunsus <- dimSums(yieldgainwaterACTunsus, dim = 3.3)
-#yieldgainwaterACTsus <- dimSums(yieldgainwaterACTsus, dim = 3.3)
-
 ```
-
-
-
-### Relationship between estimated and observed values
-
-```{r IrrigAreaScatterFunction, include=FALSE, echo=FALSE}
-# regionmapping
-mapping        <- toolGetMappingCoord2Country()
-mapping$coords <- paste(mapping$coords, mapping$iso, sep = ".")
-regmap         <- toolGetMapping("regionmappingH12.csv")
-names(regmap)  <- c("Country", "iso", "reg")
-mapping        <- merge(regmap, mapping)
-
-.ScatterValidation <- function(y, country) {
-  
-  df <- data.frame(coord = mapping$coords,
-                   country = gsub(".*\\.", "", mapping$coords),
-                   irrigarea = as.data.frame(LUHirrigated[mapping$coords, , ])$Value,
-                   irrigatableArea = as.data.frame(y[mapping$coords, , ])$Value,
-                   region = mapping$reg)
-  
-  if (country != "GLO") {
-      df <- df[df$country == country,]
-  }
-  
-  # Regression
-  modelstat <- lm(irrigatableArea ~ irrigarea, data = df, na.action = na.omit)
-  rsquared  <- round(summary(modelstat)$r.squared, digits = 3)
-  
-  # Scatter plot
-  p1 <- ggplot(df, aes(x = irrigarea, y = irrigatableArea)) +
-               geom_point(size = 0.1, na.rm = TRUE) +
-               geom_abline(intercept = c(0, 0), slope = 1, color = "grey") +
-               coord_equal(xlim = c(0, 0.3), ylim = c(0, 0.3)) +
-               xlab("Actually Irrigated Area according to LUH (in Mha)") +
-               ylab(paste0("Estimated Potentially Irrigated Area")) +
-               theme_bw() +
-               theme(panel.background = element_rect(fill = "transparent", colour = NA),  
-                     plot.background = element_rect(fill = "transparent", colour = NA), 
-                     panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                     strip.background = element_rect(fill = "transparent", colour = NA), 
-                     strip.text = element_text(color = "white")) +
-      ggtitle(paste0("Rsquared: ", rsquared))
-  
-  ggsave(paste0(outputdatapath, country, "_Scatter.pdf"), plot = p1, width = 297, height = 210, units = "mm")
-
-  
-  return(print(p1))
-}
-
-
-```
-
-```{r IrrigAreaScatterPlots, include=FALSE, echo=FALSE}
-.ScatterValidation(y = IrrigAreaEconCURSUS[,,"0.off"], country = "GLO")
-.ScatterValidation(y = IrrigAreaEconCURSUS[,,"250.off"], country = "GLO")
-.ScatterValidation(y = IrrigAreaEconCURSUS[,,"500.off"], country = "GLO")
-.ScatterValidation(y = IrrigAreaEconCURSUS[,,"1000.off"], country = "GLO")
-
-
-.ScatterValidation(y = IrrigAreaEconCURSUS[,,"250.off"], country = "IND")
-.ScatterValidation(y = IrrigAreaEconCURSUS[,,"250.off"], country = "CHN")
-.ScatterValidation(y = IrrigAreaEconCURSUS[,,"250.off"], country = "BRA")
-.ScatterValidation(y = IrrigAreaEconCURSUS[,,"250.off"], country = "USA")
-.ScatterValidation(y = IrrigAreaEconCURSUS[,,"250.off"], country = "MEX")
-
-
-.ScatterValidation(y = IrrigAreaEconCURUNSUS[,,"0.off"], country = "GLO")
-.ScatterValidation(y = IrrigAreaEconCURUNSUS[,,"250.off"], country = "GLO")
-.ScatterValidation(y = IrrigAreaEconCURUNSUS[,,"500.off"], country = "GLO")
-.ScatterValidation(y = IrrigAreaEconCURUNSUS[,,"1000.off"], country = "GLO")
-
-
-.ScatterValidation(y = IrrigAreaEconCURUNSUS[,,"250.off"], country = "IND")
-.ScatterValidation(y = IrrigAreaEconCURUNSUS[,,"250.off"], country = "CHN")
-.ScatterValidation(y = IrrigAreaEconCURUNSUS[,,"250.off"], country = "BRA")
-.ScatterValidation(y = IrrigAreaEconCURUNSUS[,,"250.off"], country = "USA")
-.ScatterValidation(y = IrrigAreaEconCURUNSUS[,,"250.off"], country = "MEX")
-
-
-```
-
 
 ```{r OverviewTables, include=FALSE, echo=FALSE}
 # Extract reported yield value gain thresholds
@@ -648,7 +558,7 @@ plotIADcurve <- function(version     = "HalfEarth",
     df$LUHIrrigated <- rep(as.array(dimSums(LUHirrigated, dim = c(1.1, 1.2))), length(df$Group) / length(as.array(dimSums(LUHirrigated, dim = c(1.1, 1.2)))))
     df$LUHCropland <- rep(as.array(dimSums(LUHtotal, dim = c(1.1, 1.2))), length(df$Group) / length(as.array(dimSums(LUHtotal, dim = c(1.1, 1.2)))))
 
-    df <- df[df$Region %in% c("CHN", "AGO", "AUS", "USA", "MEX", "BRA", "ITA", "TUR", "SDN"), ]
+    df <- df[df$Region %in% c("CHN", "IND", "AUS", "USA", "MEX", "BRA", "ITA", "TUR", "SDN"), ]
     df$Region <- factor(df$Region, levels = c("CHN", "IND", "AUS", "USA", "MEX", "BRA", "ITA", "TUR", "SDN"))
     
   } else if (aggregation == "basins") {
