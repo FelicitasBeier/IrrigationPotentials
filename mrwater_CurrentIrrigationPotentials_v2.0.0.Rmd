@@ -976,6 +976,147 @@ plotIADcurve <- function(version     = "HalfEarth",
 ```
 
 
+
+```{r PIAcurveFunctionFull, include=TRUE, echo=FALSE}
+
+plotIADcurve <- function(version     = "HalfEarth",
+                         aggregation = "countries",
+                         range       = c(0, 1000)) {
+  
+  yscale <- getNames(currCroplandSUS)[as.numeric(getNames(currCroplandSUS)) >= min(range) &
+                                      as.numeric(getNames(currCroplandSUS)) <= max(range)]
+
+  ### Aggregate and rearrange data ###
+  if (aggregation == "countries") {
+
+    df   <- as.data.frame(dimSums(currCroplandSUS[, , yscale], dim = c(1.1, 1.2)))
+    df$IrrigArea <- "Sustainable \nPotentially Irrigated Areas \non current cropland \n(CUR-SUS)"
+    
+    tmp    <- as.data.frame(dimSums(currCroplandUNSUS[, , yscale], dim = c(1.1, 1.2)))
+    tmp$IrrigArea <- "Potentially Irrigated Areas \non current cropland \n(CUR-UNSUS)"
+    df <- rbind(df, tmp)
+    
+    tmp    <- as.data.frame(dimSums(yieldgainareaCURunsus[, , yscale], dim = c(1.1, 1.2)))
+    tmp$IrrigArea <- "Yield value gain \nareas \non current cropland \n(CUR-NOLIM)"
+    df <- rbind(df, tmp)
+
+    tmp    <- as.data.frame(dimSums(potCroplandSUS[, , yscale], dim = c(1.1, 1.2)))
+    tmp$IrrigArea <- "Sustainable \nPotentially Irrigated Areas \non potential cropland \n(POT-SUS)"
+    df <- rbind(df, tmp)
+
+    df <- data.frame(Region = df$Region,
+                     GT = as.numeric(as.character(df$Data1)),
+                     Group = df$IrrigArea,
+                     IrrigArea = df$Value,
+                     stringsAsFactors = FALSE)
+    df$LUHIrrigated <- rep(as.array(dimSums(LUHirrigated, dim = c(1.1, 1.2))), length(df$Group) /
+                             length(as.array(dimSums(LUHirrigated, dim = c(1.1, 1.2)))))
+    df$LUHCropland  <- rep(as.array(dimSums(LUHtotal, dim = c(1.1, 1.2))), length(df$Group) / 
+                             length(as.array(dimSums(LUHtotal, dim = c(1.1, 1.2)))))
+
+    df        <- df[df$Region %in%          c("CHN", "IND", "AUS", "USA", "MEX", "BRA", "ITA", "TUR", "SDN"), ]
+    df$Region <- factor(df$Region, levels = c("CHN", "IND", "AUS", "USA", "MEX", "BRA", "ITA", "TUR", "SDN"))
+    
+  } else if (aggregation == "basins") {
+
+    selectedBasins <- c("Chang Jiang", "Huang He", "Mekong",
+                        "Mississippi", "Colorado", "Murray",
+                        "Parana", "Ganges", "Indus")
+
+    framestructure <- as.data.frame(new.magpie(cells_and_regions = selectedBasins,
+                                               years = getYears(currCroplandSUS),
+                                               names = yscale))
+    df             <- framestructure
+    for (b in selectedBasins) {
+      df$Value[df$Region == b] <- dimSums(currCroplandSUS[toolSelectRiverBasin(basinname = b), , yscale], dim = 1)
+    }
+    df$Group <- "Sustainable \nPotentially Irrigated Areas \non current cropland \n(CUR-SUS)"
+    
+    tmp <- framestructure
+    for (b in selectedBasins) {
+      tmp$Value[tmp$Region == b] <- dimSums(currCroplandUNSUS[toolSelectRiverBasin(basinname = b), , yscale], dim = 1)
+    }
+    tmp$Group <- "Potentially Irrigated Areas \non current cropland \n(CUR-UNSUS)"
+    df <- rbind(df, tmp)
+    
+    tmp <- framestructure
+    for (b in selectedBasins) {
+      tmp$Value[tmp$Region == b] <- dimSums(yieldgainareaCURunsus[toolSelectRiverBasin(basinname = b), , yscale], dim = 1)
+    }
+    tmp$Group <- "Yield value gain \nareas \non current cropland \n(CUR-NOLIM)"
+    df <- rbind(df, tmp)    
+
+    tmp <- framestructure
+    for (b in selectedBasins) {
+      tmp$Value[tmp$Region == b] <- dimSums(potCroplandSUS[toolSelectRiverBasin(basinname = b), , yscale], dim = 1)
+    }
+    tmp$Group <- "Sustainable \nPotentially Irrigated Areas \non potential cropland \n(POT-SUS)"
+    df <- rbind(df, tmp)
+
+    df <- data.frame(Region = df$Region,
+                     GT = as.numeric(as.character(df$Data1)),
+                     Group = df$Group,
+                     IrrigArea = df$Value,
+                     stringsAsFactors = FALSE)
+
+    tmp <- framestructure
+    for (b in selectedBasins) {
+      tmp$Value[tmp$Region == b] <- dimSums(LUHirrigated[toolSelectRiverBasin(basinname = b), , ], dim = 1)
+      tmp$Value1[tmp$Region == b] <- dimSums(LUHtotal[toolSelectRiverBasin(basinname = b), , ], dim = 1)
+    }
+    df$LUHIrrigated <- tmp$Value
+    df$LUHCropland  <- tmp$Value1
+    df$Region <- factor(df$Region, levels = selectedBasins)
+
+  } else {
+    stop("Chosen aggregation is not yet implemented")
+  }
+
+  if (aggregation == "basins") {
+    panel <- "(A) "
+  } else {
+    panel <- "(B) "
+  }
+  
+  ### Plot ###
+  out <- ggplot(df, aes(x = IrrigArea, y = GT, color = Group, group = Group, shape = Group)) +
+                geom_line(aes(linetype = Group), size = 1.5) +
+                geom_point(aes(shape = Group), size = 3) +
+                geom_point(aes(x = LUHIrrigated, y = 0), size = 5, color = "black", shape = 17) +
+                facet_wrap(~Region, scales = "free_x") +
+                # scale order:                   CUR-UNSUS   CUR-SUS,  POT-SUS      CUR-NOLIM
+                scale_color_manual(values =    c("#80cdc1", "#01665e", "#543005",  "#bf812d")) +
+                scale_linetype_manual(values = c("solid",   "solid",   "solid",    "dashed")) +
+                scale_shape_manual(values =    c(13,         19,       19,         23)) +
+                scale_x_continuous(expand = c(0, 0), limits = c(0,NA)) +
+                scale_y_continuous(expand = c(0, 0), limits = c(0,NA)) +
+                xlab("Potentially Irrigated Areas (in Mha)") + ylab("Irrigation yield value gain (in USD/ha)") +
+                ggtitle(paste0(panel, "PIA curves for selected ", aggregation)) +
+                theme_bw() +
+                theme(legend.title         = element_blank(),
+                      legend.position      = "bottom",
+                      legend.text          = element_text(size = 14),
+                      legend.key.width     = unit(2.8, "line"),
+                      legend.justification = c(0, 1),
+                      legend.margin        = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
+                      strip.text           = element_text(size = 18),
+                      strip.background     = element_rect(fill = "#f6f6f6"),
+                      plot.title           = element_text(size = 20, face = "bold"),
+                      axis.text.x          = element_text(size = 16),
+                      axis.title.x         = element_text(size = 18),
+                      axis.text.y          = element_text(size = 16),
+                      axis.title.y         = element_text(size = 18),
+                      panel.grid.major.x   = element_blank(),
+                      panel.grid.minor.x   = element_blank())
+  ggsave(paste0(outputdatapath, aggregation, "_Curves.pdf"), plot = out, width = 297, height = 210, units = "mm")
+  
+  return(out)
+}
+
+```
+
+
+
 ```{r PlotAggregateFull, include=FALSE, echo=FALSE}
 
 plotCountries <- plotIADcurve(version = version, aggregation = "countries", range = c(0, 1000))
