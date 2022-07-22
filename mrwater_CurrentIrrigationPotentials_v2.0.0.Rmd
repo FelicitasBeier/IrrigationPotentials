@@ -1,5 +1,5 @@
 ---
-title: "Economically Efficient and Environmentally Sustainable Irrigation Potentials in 2010"
+title: "Long-term Technical and Economic Irrigation Potentials around 2010"
 author: "Felicitas Beier"
 date: "`r Sys.Date()`"
 output: pdf_document
@@ -26,6 +26,7 @@ library(sf)
 # plot functions
 library(ggplot2)
 library(ggpubr)
+library(plotrix)
 
 # tables
 library(xtable) # latex
@@ -102,11 +103,11 @@ The tables PIA_bycountry_b.csv, PIWW_bycountry_b.csv, and PIWC_bycountry_b.csv
 in the supplementary information (SI) provide these purely economically 
 determined irrigation potentials without consideration of areas that are already
 today under irrigation (committed agricultural uses).
-They are aslo the basis for the country- and basin-level IAD curves and 
+They are also the basis for the country- and basin-level IAD curves and 
 economic PIA maps. 
 
 ```{r SCENARIOdata, include=FALSE, echo=FALSE}
-# Current irrigated area (ACTUAL)
+# Current irrigated area (IRR)
 IrrigAreaEconIRRSUS    <- read.magpie(paste0(inputdatapath, "IrrigAreaEconACTSUS", ".mz"))
 IrrigAreaEconIRRUNSUS  <- read.magpie(paste0(inputdatapath, "IrrigAreaEconACTUNSUS", ".mz"))
 
@@ -158,7 +159,7 @@ yieldgainwaterPOTsus   <- read.magpie(paste0(inputdatapath, "yieldgainwater_potS
 
 
 ```{r OverviewTables, include=FALSE, echo=FALSE}
-# Extract reported yield value gain thresholds
+# Extract reported yield gain thresholds
 gt <- getNames(collapseNames(IrrigAreaEconIRRSUS[,,"on"]))
 
 ## Irrigated Area (PIA = Potentially Irrigated Areas) [mio. ha]
@@ -388,17 +389,25 @@ for (g in gt) {
   i <- i + 1
 }
 
+PIAout  <- PIA
+PIWWout <- PIWW
+PIWCout <- PIWC
+
+colnames(PIAout)  <- gsub("GT", "Yield gain threshold", colnames(PIAout))
+colnames(PIWWout) <- gsub("GT", "Yield gain threshold", colnames(PIWWout))
+colnames(PIWCout) <- gsub("GT", "Yield gain threshold", colnames(PIWCout))
+
 # Write country results to csv
-write.csv(x = PIA, 
+write.csv(x = PIAout, 
           file = paste0(outputdatapath, "PIA_bycountry_b.csv"), 
           row.names = FALSE)
-write.csv(x = PIWW, 
+write.csv(x = PIWWout, 
           file = paste0(outputdatapath, "PIWW_bycountry_b.csv"), 
           row.names = FALSE)
-write.csv(x = PIWC, 
+write.csv(x = PIWCout, 
           file = paste0(outputdatapath, "PIWC_bycountry_b.csv"),
           row.names = FALSE)
-
+rm(PIAout, PIWWout, PIWCout)
 ```
 
 We provide the global overview of technical and economic irrigation potentials 
@@ -407,7 +416,7 @@ The table Global.csv in the SI provides the full results for all sustainability
 scenarios (NOLIM, UNSUS, WATSUS, LANDSUS, SUS) and all indicators (PIWC, PIWW, PIA)
 on currently irrigated areas (IRR), current (rainfed and irrigated) cropland (CUR),
 and potential cropland (POT).
-We distinguish two yield value gain thresholds (>300 USD/ha and >600 USD/ha).
+We distinguish three yield gain thresholds (0, 300 and 600 USD/ha).
 
 ```{r GlobalOverviewTable, include=FALSE, echo=FALSE}
 
@@ -504,8 +513,6 @@ global <- data.frame(Scenario         = global$Scenario,
                      PIA_300  = global$PIA.300, PIWC_300 = global$PIWC.300, PIWW_300 = global$PIWW.300,
                      PIA_600  = global$PIA.600, PIWC_600 = global$PIWC.600, PIWW_600 = global$PIWW.600)
 
-print(xtable(global, type = "latex", file = "table.tex", digits = 0, align = c("l", "|l|", "r", "r", "r|", "r", "r", "r|", "r", "r", "r|"), label = "Tabl:IrrigationPotentials", caption = "Potentially irrigated areas (PIA), irrigation water consumption potentials (PIWC) and irrigation water withdrawal potentials (PIWW) for different scenarios. Technical irrigation potential (A) refers to the irrigation potential at a yield value gain threshold of at least 0 USD/ha. Economic irrigation potential (B) refers to the irrigation potential at a yield value gain threshold of at least 600 USD/ha"), include.rownames= FALSE)
-
 write.csv(x = global, 
           file = paste0(outputdatapath, "Global", ".csv"), 
           row.names = FALSE)
@@ -555,115 +562,109 @@ PIA_IRR <- ggplot(data = piaStacked[piaStacked$LandScen == "IRR",], aes(x = SusS
                   geom_bar(stat = "identity", width = 0.9) +
                   geom_text(aes(label = Value), vjust = -0.25, 
                                data = data[data$gainthreshold == 0 & data$Indicator == "PIA" & data$LandScen == "IRR", ],
-                               color = "black", size = 6) +
-                  scale_fill_manual("Yield value gain threshold: ", values = c("#66c2a4", "#6a51a3", "#d94701")) +
-                  scale_x_discrete(limits = piaStacked$SusScen[1:4]) +
+                               color = "black", size = 7) +
+                  scale_fill_manual(name = "Yield gain threshold (in USD/ha): ", values = c("#66c2a4", "#6a51a3", "#d94701")) +
+                  scale_x_discrete(name = "", limits = piaStacked$SusScen[1:4]) +
                   theme_minimal() +
-                  ylab("Mha") + xlab("") +
                   ggtitle("1a) PIA on IRR") + 
-                  ylim(0, 200) +
+                  scale_y_continuous(name = "Mha", limits = c(0, 200), breaks = c(0, 50, 100, 150, 200)) + 
                   theme(legend.position = "bottom",
-                        text = element_text(size = 26),
+                        text = element_text(size = 24),
                         axis.ticks = element_blank(),
-                        axis.title = element_text(size = 26),
+                        axis.title = element_text(size = 24),
                         plot.title = element_text(size = 20, face = "bold"),
                         axis.text.x = element_blank(),
-                        axis.text.y = element_text(size = 26))
+                        axis.text.y = element_text(size = 20))
 
 PIA_CUR <- ggplot(data = piaStacked[piaStacked$LandScen == "CUR",], aes(x = SusScen, y = Value, fill = gainthreshold)) +
                   geom_bar(stat = "identity", width = 0.9) +
                   geom_text(aes(label = Value), vjust = -0.05, 
                                data = data[data$gainthreshold == 0 & data$Indicator == "PIA" & data$LandScen == "CUR", ],
-                               color = "black", size = 6) +
-                  scale_fill_manual("Yield value gain threshold: ", values = c("#66c2a4", "#6a51a3", "#d94701")) +
-                  scale_x_discrete(limits = piaStacked$SusScen[1:4]) +
+                               color = "black", size = 7) +
+                  scale_fill_manual(name = "Yield gain threshold (in USD/ha): ", values = c("#66c2a4", "#6a51a3", "#d94701")) +
+                  scale_x_discrete(name = "", limits = piaStacked$SusScen[1:4]) +
                   theme_minimal() +
-                  ylab("Mha") + xlab("") +
                   ggtitle("1b) PIA on CUR") + 
-                  ylim(0, 1200) +
+                  scale_y_continuous(name = "", limits = c(0, 1200), breaks = c(0, 200, 400, 600, 800, 1000)) +
                   theme(legend.position = "bottom",
-                        text = element_text(size = 26),
+                        text = element_text(size = 24),
                         axis.ticks = element_blank(),
-                        axis.title = element_text(size = 26),
+                        axis.title = element_text(size = 24),
                         plot.title = element_text(size = 20, face = "bold"),
                         axis.text.x = element_blank(),
-                        axis.text.y = element_text(size = 26))
+                        axis.text.y = element_text(size = 20))
 
 PIA_POT <- ggplot(data = piaStacked[piaStacked$LandScen == "POT",], aes(x = SusScen, y = Value, fill = gainthreshold)) +
                   geom_bar(stat = "identity", width = 0.9) +
                   geom_text(aes(label = Value), vjust = -0.05, 
                                data = data[data$gainthreshold == 0 & data$Indicator == "PIA" & data$LandScen == "POT", ],
-                               color = "black", size = 6) +
-                  scale_fill_manual("Yield value gain threshold: ", values = c("#66c2a4", "#6a51a3", "#d94701")) +
-                  scale_x_discrete(limits = piaStacked$SusScen[1:4]) +
+                               color = "black", size = 7) +
+                  scale_fill_manual(name = "Yield gain threshold (in USD/ha): ", values = c("#66c2a4", "#6a51a3", "#d94701")) +
+                  scale_x_discrete(name = "", limits = piaStacked$SusScen[1:4]) +
                   theme_minimal() +
-                  ylab("Mha") + xlab("") +
-                  ylim(0, 4000) +
+                  scale_y_continuous(name = "", limits = c(0, 3500), breaks = c(0, 1000, 2000, 3000)) +
                   ggtitle("1c) PIA on POT") +
                   theme(legend.position = "bottom",
-                        text = element_text(size = 26),
+                        text = element_text(size = 24),
                         axis.ticks = element_blank(),
-                        axis.title = element_text(size = 26),
+                        axis.title = element_text(size = 24),
                         plot.title = element_text(size = 20, face = "bold"),
                         axis.text.x = element_blank(),
-                        axis.text.y = element_text(size = 26))
+                        axis.text.y = element_text(size = 20))
 
 PIWC_IRR <- ggplot(data = piwcStacked[piwcStacked$LandScen == "IRR",], aes(x = SusScen, y = Value, fill = gainthreshold)) +
                   geom_bar(stat = "identity", width = 0.9) +
                   geom_text(aes(label = Value), vjust = -0.25, 
                                data = data[data$gainthreshold == 0 & data$Indicator == "PIWC" & data$LandScen == "IRR", ],
-                               color = "black", size = 6) +
-                  scale_fill_manual("Yield value gain threshold: ", values = c("#66c2a4", "#6a51a3", "#d94701")) +
-                  scale_x_discrete(limits = piwcStacked$SusScen[1:4]) +
+                               color = "black", size = 7) +
+                  scale_fill_manual(name = "Yield gain threshold (in USD/ha): ", values = c("#66c2a4", "#6a51a3", "#d94701")) +
+                  scale_x_discrete(name = "", limits = piwcStacked$SusScen[1:4]) +
                   theme_minimal() +
-                  ylab("km3") + xlab("") +
                   ggtitle("2a) PIWC on IRR") + 
-                  ylim(0, 600) +
+                  scale_y_continuous(name = "km3", limits = c(0, 600), breaks = c(0, 100, 200, 300, 400, 500, 600)) + 
                   theme(legend.position = "bottom",
-                        text = element_text(size = 26),
+                        text = element_text(size = 24),
                         axis.ticks = element_blank(),
-                        axis.title = element_text(size = 26),
+                        axis.title = element_text(size = 24),
                         plot.title = element_text(size = 20, face = "bold"),
                         axis.text.x = element_text(face = "bold", size = 20, angle = 90, vjust = -0.05),
-                        axis.text.y = element_text(size = 26))
+                        axis.text.y = element_text(size = 20))
 
 PIWC_CUR <- ggplot(data = piwcStacked[piwcStacked$LandScen == "CUR",], aes(x = SusScen, y = Value, fill = gainthreshold)) +
                   geom_bar(stat = "identity", width = 0.9) +
                   geom_text(aes(label = Value), vjust = -0.05, 
                                data = data[data$gainthreshold == 0 & data$Indicator == "PIWC" & data$LandScen == "CUR", ],
-                               color = "black", size = 6) +
-                  scale_fill_manual("Yield value gain threshold: ", values = c("#66c2a4", "#6a51a3", "#d94701")) +
-                  scale_x_discrete(limits = piwcStacked$SusScen[1:4]) +
+                               color = "black", size = 7) +
+                  scale_fill_manual(name = "Yield gain threshold (in USD/ha): ", values = c("#66c2a4", "#6a51a3", "#d94701")) +
+                  scale_x_discrete(name = "", limits = piwcStacked$SusScen[1:4]) +
                   theme_minimal() +
-                  ylab("km3") + xlab("") +
                   ggtitle("2b) PIWC on CUR") + 
-                  ylim(0, 2500) +
+                  scale_y_continuous(name = "", limits = c(0, 2500), breaks = c(0, 500, 1000, 1500, 2000)) + 
                   theme(legend.position = "bottom",
-                        text = element_text(size = 26),
+                        text = element_text(size = 24),
                         axis.ticks = element_blank(),
-                        axis.title = element_text(size = 26),
+                        axis.title = element_text(size = 24),
                         plot.title = element_text(size = 20, face = "bold"),
                         axis.text.x = element_text(face = "bold", size = 20, angle = 90, vjust = -0.05),
-                        axis.text.y = element_text(size = 26))
+                        axis.text.y = element_text(size = 20))
 
 PIWC_POT <- ggplot(data = piwcStacked[piwcStacked$LandScen == "POT",], aes(x = SusScen, y = Value, fill = gainthreshold)) +
                   geom_bar(stat = "identity", width = 0.9) +
                   geom_text(aes(label = Value), vjust = -0.05, 
                                data = data[data$gainthreshold == 0 & data$Indicator == "PIWC" & data$LandScen == "POT", ],
-                               color = "black", size = 6) +
-                  scale_fill_manual("Yield value gain threshold: ", values = c("#66c2a4", "#6a51a3", "#d94701")) +
-                  scale_x_discrete(limits = piwcStacked$SusScen[1:4]) +
+                               color = "black", size = 7) +
+                  scale_fill_manual(name = "Yield gain threshold (in USD/ha): ", values = c("#66c2a4", "#6a51a3", "#d94701")) +
+                  scale_x_discrete(name = "", limits = piwcStacked$SusScen[1:4]) +
                   theme_minimal() +
-                  ylab("km3") + xlab("") +
-                  ylim(0, 6500) +
+                  scale_y_continuous(name = "", limits = c(0, 6000), breaks = c(0, 2000, 4000, 6000)) + 
                   ggtitle("2c) PIWC on POT") +
                   theme(legend.position = "bottom",
-                        text = element_text(size = 26),
+                        text = element_text(size = 24),
                         axis.ticks = element_blank(),
-                        axis.title = element_text(size = 26),
+                        axis.title = element_text(size = 24),
                         plot.title = element_text(size = 20, face = "bold"),
                         axis.text.x = element_text(face = "bold", size = 20, angle = 90, vjust = -0.05),
-                        axis.text.y = element_text(size = 26))
+                        axis.text.y = element_text(size = 20))
 
 barplotPIA <- ggarrange(PIA_IRR, PIA_CUR, PIA_POT, 
                      ncol = 3, common.legend = TRUE, legend = "bottom")
@@ -697,286 +698,6 @@ potYieldgain1     <- read.magpie(paste0(inputdatapath, "yieldgainarea_potUNSUS.m
 
 ```
 
-
-```{r PIAcurveFunctionYieldgainarea, include=TRUE, echo=FALSE}
-
-plotIADcurve <- function(version     = "HalfEarth",
-                         aggregation = "countries",
-                         range       = c(0, 1000)) {
-  
-  yscale <- getNames(currCroplandSUS)[as.numeric(getNames(currCroplandSUS)) >= min(range) &
-                                      as.numeric(getNames(currCroplandSUS)) <= max(range)]
-
-  ### Aggregate and rearrange data ###
-  if (aggregation == "countries") {
-
-    df   <- as.data.frame(dimSums(currCroplandSUS[, , yscale], dim = c(1.1, 1.2)))
-    df$IrrigArea <- "Sustainable \nPotentially Irrigated Areas \non current cropland \n(CUR-SUS)"
-
-    tmp    <- as.data.frame(dimSums(potCroplandSUS[, , yscale], dim = c(1.1, 1.2)))
-    tmp$IrrigArea <- "Sustainable \nPotentially Irrigated Areas \non potential cropland \n(POT-SUS)"
-    df <- rbind(df, tmp)
-
-    tmp    <- as.data.frame(dimSums(yieldgainareaCURunsus[, , yscale], dim = c(1.1, 1.2)))
-    tmp$IrrigArea <- "Areas with yield value gain \nthrough irrigation \non current cropland \n(CUR-NOLIM)"
-    df <- rbind(df, tmp)
-
-    tmp    <- as.data.frame(dimSums(yieldgainareaPOTunsus[, , yscale], dim = c(1.1, 1.2)))
-    tmp$IrrigArea <- "Areas with yield value gain \nthrough irrigation \non potential cropland \n(POT-NOLIM)"
-    df <- rbind(df, tmp)
-
-    df <- data.frame(Region = df$Region,
-                     GT = as.numeric(as.character(df$Data1)),
-                     Group = df$IrrigArea,
-                     IrrigArea = df$Value,
-                     stringsAsFactors = FALSE)
-    df$LUHIrrigated <- rep(as.array(dimSums(LUHirrigated, dim = c(1.1, 1.2))), length(df$Group) /
-                             length(as.array(dimSums(LUHirrigated, dim = c(1.1, 1.2)))))
-    df$LUHCropland  <- rep(as.array(dimSums(LUHtotal, dim = c(1.1, 1.2))), length(df$Group) / 
-                             length(as.array(dimSums(LUHtotal, dim = c(1.1, 1.2)))))
-
-    df        <- df[df$Region %in%          c("CHN", "IND", "AUS", "USA", "MEX", "BRA", "ITA", "TUR", "SDN"), ]
-    df$Region <- factor(df$Region, levels = c("CHN", "IND", "AUS", "USA", "MEX", "BRA", "ITA", "TUR", "SDN"))
-    
-  } else if (aggregation == "basins") {
-
-    selectedBasins <- c("Chang Jiang", "Huang He", "Mekong",
-                        "Mississippi", "Colorado", "Murray",
-                        "Parana", "Ganges", "Indus")
-
-    framestructure <- as.data.frame(new.magpie(cells_and_regions = selectedBasins,
-                                               years = getYears(currCroplandSUS),
-                                               names = yscale))
-    df             <- framestructure
-    for (b in selectedBasins) {
-      df$Value[df$Region == b] <- dimSums(currCroplandSUS[toolSelectRiverBasin(basinname = b), , yscale], dim = 1)
-    }
-    df$Group <- "Sustainable \nPotentially Irrigated Areas \non current cropland \n(CUR-SUS)"
-
-    tmp <- framestructure
-    for (b in selectedBasins) {
-      tmp$Value[tmp$Region == b] <- dimSums(potCroplandSUS[toolSelectRiverBasin(basinname = b), , yscale], dim = 1)
-    }
-    tmp$Group <- "Sustainable \nPotentially Irrigated Areas \non potential cropland \n(POT-SUS)"
-    df <- rbind(df, tmp)
-
-    tmp <- framestructure
-    for (b in selectedBasins) {
-      tmp$Value[tmp$Region == b] <- dimSums(yieldgainareaCURunsus[toolSelectRiverBasin(basinname = b), , yscale], dim = 1)
-    }
-    tmp$Group <- "Areas with yield value gain \nthrough irrigation \non current cropland \n(CUR-NOLIM)"
-    df <- rbind(df, tmp)
-
-    tmp <- framestructure
-    for (b in selectedBasins) {
-      tmp$Value[tmp$Region == b] <- dimSums(yieldgainareaPOTunsus[toolSelectRiverBasin(basinname = b), , yscale], dim = 1)
-    }
-    tmp$Group <- "Areas with yield value gain \nthrough irrigation \non potential cropland \n(POT-NOLIM)"
-    df <- rbind(df, tmp)
-  
-    df <- data.frame(Region = df$Region,
-                     GT = as.numeric(as.character(df$Data1)),
-                     Group = df$Group,
-                     IrrigArea = df$Value,
-                     stringsAsFactors = FALSE)
-
-    tmp <- framestructure
-    for (b in selectedBasins) {
-      tmp$Value[tmp$Region == b] <- dimSums(LUHirrigated[toolSelectRiverBasin(basinname = b), , ], dim = 1)
-      tmp$Value1[tmp$Region == b] <- dimSums(LUHtotal[toolSelectRiverBasin(basinname = b), , ], dim = 1)
-    }
-    df$LUHIrrigated <- tmp$Value
-    df$LUHCropland  <- tmp$Value1
-    df$Region <- factor(df$Region, levels = selectedBasins)
-
-  } else {
-    stop("Chosen aggregation is not yet implemented")
-  }
-
-  if (aggregation == "basins") {
-    panel <- "(A) "
-  } else {
-    panel <- "(B) "
-  }
-  
-  ### Plot ###
-  out <- ggplot(df, aes(x = IrrigArea, y = GT, color = Group, group = Group, shape = Group)) +
-                geom_line(aes(linetype = Group), size = 1.5) +
-                geom_point(size = 3) +
-                geom_point(aes(x = LUHIrrigated, y = 0), size = 5, color = "black", shape = 17) +
-                facet_wrap(~Region, scales = "free_x") +
-                scale_color_manual(values = c("#bf812d", "#543005", "#bf812d", "#543005")) +
-                scale_linetype_manual(values = c("dotted", "dotted", "solid", "solid")) +
-                scale_shape_manual(values = c(19, 13, 19, 13)) +
-                scale_x_continuous(expand = c(0, 0), limits = c(0,NA)) +
-                scale_y_continuous(expand = c(0, 0), limits = c(0,NA)) +
-                xlab("Potentially Irrigated Areas (in Mha)") + ylab("Irrigation yield value gain (in USD/ha)") +
-                ggtitle(paste0(panel, "PIA curves for selected ", aggregation)) +
-                theme_bw() +
-                theme(legend.title         = element_blank(),
-                      legend.position      = "bottom",
-                      legend.text          = element_text(size = 16),
-                      legend.key.width     = unit(2.8, "line"),
-                      legend.justification = c(0, 1),
-                      legend.margin        = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
-                      strip.text           = element_text(size = 18),
-                      strip.background     = element_rect(fill = "#f6f6f6"),
-                      plot.title           = element_text(size = 20, face = "bold"),
-                      axis.text.x          = element_text(size = 16),
-                      axis.title.x         = element_text(size = 18),
-                      axis.text.y          = element_text(size = 16),
-                      axis.title.y         = element_text(size = 18),
-                      panel.grid.major.x   = element_blank(),
-                      panel.grid.minor.x   = element_blank())
-  ggsave(paste0(outputdatapath, aggregation, "_Curves.pdf"), plot = out, width = 297, height = 210, units = "mm")
-  
-  return(out)
-}
-
-```
-
-
-# To Do: Decide which curve plots to show
-
-```{r PIAcurveFunctionUNSUSvsSUS, include=TRUE, echo=FALSE}
-    
-plotIADcurve <- function(version     = "HalfEarth",
-                         aggregation = "countries",
-                         range       = c(0, 1000)) {
-  
-  yscale <- getNames(currCroplandSUS)[as.numeric(getNames(currCroplandSUS)) >= min(range) &
-                                      as.numeric(getNames(currCroplandSUS)) <= max(range)]
-
-  ### Aggregate and rearrange data ###
-  if (aggregation == "countries") {
-
-    df   <- as.data.frame(dimSums(currCroplandSUS[, , yscale], dim = c(1.1, 1.2)))
-    df$IrrigArea <- "Sustainable \nPotentially Irrigated Areas \non current cropland \n(CUR-SUS)"
-
-    tmp    <- as.data.frame(dimSums(potCroplandSUS[, , yscale], dim = c(1.1, 1.2)))
-    tmp$IrrigArea <- "Sustainable \nPotentially Irrigated Areas \non potential cropland \n(POT-SUS)"
-    df <- rbind(df, tmp)
-
-    tmp    <- as.data.frame(dimSums(currCroplandUNSUS[, , yscale], dim = c(1.1, 1.2)))
-    tmp$IrrigArea <- "Potentially Irrigated Areas \non current cropland \n(CUR-UNSUS)"
-    df <- rbind(df, tmp)
-
-    tmp    <- as.data.frame(dimSums(potCroplandUNSUS[, , yscale], dim = c(1.1, 1.2)))
-    tmp$IrrigArea <- "Potentially Irrigated Areas \non potential cropland \n(POT-UNSUS)"
-    df <- rbind(df, tmp)
-
-    df <- data.frame(Region = df$Region,
-                     GT = as.numeric(as.character(df$Data1)),
-                     Group = df$IrrigArea,
-                     IrrigArea = df$Value,
-                     stringsAsFactors = FALSE)
-    df$LUHIrrigated <- rep(as.array(dimSums(LUHirrigated, dim = c(1.1, 1.2))), length(df$Group) /
-                             length(as.array(dimSums(LUHirrigated, dim = c(1.1, 1.2)))))
-    df$LUHCropland  <- rep(as.array(dimSums(LUHtotal, dim = c(1.1, 1.2))), length(df$Group) / 
-                             length(as.array(dimSums(LUHtotal, dim = c(1.1, 1.2)))))
-
-    df        <- df[df$Region %in%          c("CHN", "IND", "AUS", "USA", "MEX", "BRA", "ITA", "TUR", "SDN"), ]
-    df$Region <- factor(df$Region, levels = c("CHN", "IND", "AUS", "USA", "MEX", "BRA", "ITA", "TUR", "SDN"))
-    
-  } else if (aggregation == "basins") {
-
-    selectedBasins <- c("Chang Jiang", "Huang He", "Mekong",
-                        "Mississippi", "Colorado", "Murray",
-                        "Parana", "Ganges", "Indus")
-
-    framestructure <- as.data.frame(new.magpie(cells_and_regions = selectedBasins,
-                                               years = getYears(currCroplandSUS),
-                                               names = yscale))
-    df             <- framestructure
-    for (b in selectedBasins) {
-      df$Value[df$Region == b] <- dimSums(currCroplandSUS[toolSelectRiverBasin(basinname = b), , yscale], dim = 1)
-    }
-    df$Group <- "Sustainable \nPotentially Irrigated Areas \non current cropland \n(CUR-SUS)"
-
-    tmp <- framestructure
-    for (b in selectedBasins) {
-      tmp$Value[tmp$Region == b] <- dimSums(potCroplandSUS[toolSelectRiverBasin(basinname = b), , yscale], dim = 1)
-    }
-    tmp$Group <- "Sustainable \nPotentially Irrigated Areas \non potential cropland \n(POT-SUS)"
-    df <- rbind(df, tmp)
-
-    tmp <- framestructure
-    for (b in selectedBasins) {
-      tmp$Value[tmp$Region == b] <- dimSums(currCroplandUNSUS[toolSelectRiverBasin(basinname = b), , yscale], dim = 1)
-    }
-    tmp$Group <- "Potentially Irrigated Areas \non current cropland \n(CUR-UNSUS)"
-    df <- rbind(df, tmp)
-
-    tmp <- framestructure
-    for (b in selectedBasins) {
-      tmp$Value[tmp$Region == b] <- dimSums(potCroplandUNSUS[toolSelectRiverBasin(basinname = b), , yscale], dim = 1)
-    }
-    tmp$Group <- "Potentially Irrigated Areas \non potential cropland \n(POT-UNSUS)"
-    df <- rbind(df, tmp)
-  
-    df <- data.frame(Region = df$Region,
-                     GT = as.numeric(as.character(df$Data1)),
-                     Group = df$Group,
-                     IrrigArea = df$Value,
-                     stringsAsFactors = FALSE)
-
-    tmp <- framestructure
-    for (b in selectedBasins) {
-      tmp$Value[tmp$Region == b] <- dimSums(LUHirrigated[toolSelectRiverBasin(basinname = b), , ], dim = 1)
-      tmp$Value1[tmp$Region == b] <- dimSums(LUHtotal[toolSelectRiverBasin(basinname = b), , ], dim = 1)
-    }
-    df$LUHIrrigated <- tmp$Value
-    df$LUHCropland  <- tmp$Value1
-    df$Region <- factor(df$Region, levels = selectedBasins)
-
-  } else {
-    stop("Chosen aggregation is not yet implemented")
-  }
-
-  if (aggregation == "basins") {
-    panel <- "(A) "
-  } else {
-    panel <- "(B) "
-  }
-  
-  ### Plot ###
-  out <- ggplot(df, aes(x = IrrigArea, y = GT, color = Group, group = Group, shape = Group)) +
-                geom_line(aes(linetype = Group), size = 1.5) +
-                geom_point(size = 3) +
-                geom_point(aes(x = LUHIrrigated, y = 0), size = 5, color = "black", shape = 17) +
-                facet_wrap(~Region, scales = "free_x") +
-                scale_color_manual(values = c("#bf812d", "#543005", "#bf812d", "#543005")) +
-                scale_linetype_manual(values = c("dotted", "dotted", "solid", "solid")) +
-                scale_shape_manual(values = c(19, 13, 19, 13)) +
-                scale_x_continuous(expand = c(0, 0), limits = c(0,NA)) +
-                scale_y_continuous(expand = c(0, 0), limits = c(0,NA)) +
-                xlab("Potentially Irrigated Areas (in Mha)") + ylab("Irrigation yield value gain (in USD/ha)") +
-                ggtitle(paste0(panel, "PIA curves for selected ", aggregation)) +
-                theme_bw() +
-                theme(legend.title         = element_blank(),
-                      legend.position      = "bottom",
-                      legend.text          = element_text(size = 16),
-                      legend.key.width     = unit(2.8, "line"),
-                      legend.justification = c(0, 1),
-                      legend.margin        = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
-                      strip.text           = element_text(size = 18),
-                      strip.background     = element_rect(fill = "#f6f6f6"),
-                      plot.title           = element_text(size = 20, face = "bold"),
-                      axis.text.x          = element_text(size = 16),
-                      axis.title.x         = element_text(size = 18),
-                      axis.text.y          = element_text(size = 16),
-                      axis.title.y         = element_text(size = 18),
-                      panel.grid.major.x   = element_blank(),
-                      panel.grid.minor.x   = element_blank())
-  ggsave(paste0(outputdatapath, aggregation, "_Curves.pdf"), plot = out, width = 297, height = 210, units = "mm")
-  
-  return(out)
-}
-
-```
-
-
-
 ```{r PIAcurveFunctionFull, include=TRUE, echo=FALSE}
 
 plotIADcurve <- function(version     = "HalfEarth",
@@ -997,7 +718,7 @@ plotIADcurve <- function(version     = "HalfEarth",
     df <- rbind(df, tmp)
     
     tmp    <- as.data.frame(dimSums(yieldgainareaCURunsus[, , yscale], dim = c(1.1, 1.2)))
-    tmp$IrrigArea <- "Yield value gain \nareas \non current cropland \n(CUR-NOLIM)"
+    tmp$IrrigArea <- "Yield gain areas \non current cropland \n(CUR-NOLIM)"
     df <- rbind(df, tmp)
 
     tmp    <- as.data.frame(dimSums(potCroplandSUS[, , yscale], dim = c(1.1, 1.2)))
@@ -1043,7 +764,7 @@ plotIADcurve <- function(version     = "HalfEarth",
     for (b in selectedBasins) {
       tmp$Value[tmp$Region == b] <- dimSums(yieldgainareaCURunsus[toolSelectRiverBasin(basinname = b), , yscale], dim = 1)
     }
-    tmp$Group <- "Yield value gain \nareas \non current cropland \n(CUR-NOLIM)"
+    tmp$Group <- "Yield gain \nareas \non current cropland \n(CUR-NOLIM)"
     df <- rbind(df, tmp)    
 
     tmp <- framestructure
@@ -1088,9 +809,8 @@ plotIADcurve <- function(version     = "HalfEarth",
                 scale_color_manual(values =    c("#80cdc1", "#01665e", "#543005",  "#bf812d")) +
                 scale_linetype_manual(values = c("solid",   "solid",   "solid",    "dashed")) +
                 scale_shape_manual(values =    c(13,         19,       19,         23)) +
-                scale_x_continuous(expand = c(0, 0), limits = c(0,NA)) +
-                scale_y_continuous(expand = c(0, 0), limits = c(0,NA)) +
-                xlab("Potentially Irrigated Areas (in Mha)") + ylab("Irrigation yield value gain (in USD/ha)") +
+                scale_x_continuous(name = "Potentially Irrigated Areas (in Mha)", expand = c(0, 0), limits = c(0,NA)) +
+                scale_y_continuous(name = "Irrigation yield gain (in USD/ha)", expand = c(0, 0), limits = c(0, 1000), breaks = c(0, 300, 600, 900)) +
                 ggtitle(paste0(panel, "PIA curves for selected ", aggregation)) +
                 theme_bw() +
                 theme(legend.title         = element_blank(),
@@ -1143,7 +863,7 @@ river flows and should be considered in the assessment of cellular discharge.
 The following section used a model run where the current agricultural use 
 river routing iteration is activated.
 It is the basis for the global summary table, the irrigation potential maps and
-additional country tables of the Supplementary Material. 
+additional country tables of the Supplementary Material labeled with (a). 
 
 
 ```{r SCENARIOdataCOMAG, include=FALSE, echo=FALSE}
@@ -1180,7 +900,7 @@ wat_ag_wwEconPOTUNSUScomAg <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconPO
 ```
 
 ```{r OverviewTablesCOMAG, include=FALSE, echo=FALSE}
-# Extract reported yield value gain thresholds
+# Extract reported yield gain thresholds
 gt <- getNames(collapseNames(IrrigAreaEconIRRSUScomAg[,,"on"]))
 
 ## Irrigated Area (PIA = Potentially Irrigated Areas) [mio. ha]
@@ -1190,7 +910,7 @@ for (g in gt) {
 
   # Actually Irrigated Land
   data <- as.data.frame(dimSums(yieldgainareaIRRunsus[,,g], dim = c(1.1, 1.2)))
-  data <- data.frame(Country = data$Region, "IRR" = data$Value, GT = g)
+  data <- data.frame(Country = data$Region, "IRR-NOLIM" = data$Value, GT = g)
   
   tmp  <- as.data.frame(dimSums(IrrigAreaEconIRRUNSUScomAg[,,"off"][,,"0"], dim = c(1.1, 1.2)))
   tmp  <- data.frame(Country = tmp$Region, "IRR-UNSUS" = tmp$Value, GT = g)
@@ -1210,7 +930,7 @@ for (g in gt) {
   
   # Current Cropland
   tmp  <- as.data.frame(dimSums(yieldgainareaCURunsus[,,g], dim = c(1.1, 1.2)))
-  tmp  <- data.frame(Country = tmp$Region, "CUR" = tmp$Value, GT = g)
+  tmp  <- data.frame(Country = tmp$Region, "CUR-NOLIM" = tmp$Value, GT = g)
   data <- merge(data, tmp)
   
   tmp  <- as.data.frame(dimSums(IrrigAreaEconCURUNSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
@@ -1231,7 +951,7 @@ for (g in gt) {
   
   # Potential cropland
   tmp  <- as.data.frame(dimSums(yieldgainareaPOTunsus[,,g], dim = c(1.1, 1.2)))
-  tmp  <- data.frame(Country = tmp$Region, "POT" = tmp$Value, GT = g)
+  tmp  <- data.frame(Country = tmp$Region, "POT-NOLIM" = tmp$Value, GT = g)
   data <- merge(data, tmp)
   
   tmp  <- as.data.frame(dimSums(IrrigAreaEconPOTUNSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
@@ -1265,7 +985,7 @@ for (g in gt) {
 
   # Actually Irrigated Land
   data <- as.data.frame(dimSums(yieldgainwaterIRRunsus[,,"consumption"][,,g], dim = c(1.1, 1.2)))
-  data <- data.frame(Country = data$Region, "IRR" = data$Value, GT = g)
+  data <- data.frame(Country = data$Region, "IRR-NOLIM" = data$Value, GT = g)
   
   tmp  <- as.data.frame(dimSums(wat_ag_wcEconIRRUNSUScomAg[,,"off"][,,"0"], dim = c(1.1, 1.2)))
   tmp  <- data.frame(Country = tmp$Region, "IRR-UNSUS" = tmp$Value, GT = g)
@@ -1285,7 +1005,7 @@ for (g in gt) {
   
   # Current Cropland
   tmp  <- as.data.frame(dimSums(yieldgainwaterCURunsus[,,"consumption"][,,g], dim = c(1.1, 1.2)))
-  tmp  <- data.frame(Country = tmp$Region, "CUR" = tmp$Value, GT = g)
+  tmp  <- data.frame(Country = tmp$Region, "CUR-NOLIM" = tmp$Value, GT = g)
   data <- merge(data, tmp)
   
   tmp  <- as.data.frame(dimSums(wat_ag_wcEconCURUNSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
@@ -1306,7 +1026,7 @@ for (g in gt) {
   
   # Potential cropland
   tmp  <- as.data.frame(dimSums(yieldgainwaterPOTunsus[,,"consumption"][,,g], dim = c(1.1, 1.2)))
-  tmp  <- data.frame(Country = tmp$Region, "POT" = tmp$Value, GT = g)
+  tmp  <- data.frame(Country = tmp$Region, "POT-NOLIM" = tmp$Value, GT = g)
   data <- merge(data, tmp)
   
   tmp  <- as.data.frame(dimSums(wat_ag_wcEconPOTUNSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
@@ -1342,7 +1062,7 @@ for (g in gt) {
 
   # Actually Irrigated Land
   data <- as.data.frame(dimSums(yieldgainwaterIRRunsus[,,"withdrawal"][,,g], dim = c(1.1, 1.2)))
-  data <- data.frame(Country = data$Region, "IRR" = data$Value, GT = g)
+  data <- data.frame(Country = data$Region, "IRR-NOLIM" = data$Value, GT = g)
   
   tmp  <- as.data.frame(dimSums(wat_ag_wwEconIRRUNSUScomAg[,,"off"][,,"0"], dim = c(1.1, 1.2)))
   tmp  <- data.frame(Country = tmp$Region, "IRR-UNSUS" = tmp$Value, GT = g)
@@ -1362,7 +1082,7 @@ for (g in gt) {
   
   # Current Cropland
   tmp  <- as.data.frame(dimSums(yieldgainwaterCURunsus[,,"withdrawal"][,,g], dim = c(1.1, 1.2)))
-  tmp  <- data.frame(Country = tmp$Region, "CUR" = tmp$Value, GT = g)
+  tmp  <- data.frame(Country = tmp$Region, "CUR-NOLIM" = tmp$Value, GT = g)
   data <- merge(data, tmp)
   
   tmp  <- as.data.frame(dimSums(wat_ag_wwEconCURUNSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
@@ -1383,7 +1103,7 @@ for (g in gt) {
   
   # Potential cropland
   tmp  <- as.data.frame(dimSums(yieldgainwaterPOTunsus[,,"withdrawal"][,,g], dim = c(1.1, 1.2)))
-  tmp  <- data.frame(Country = tmp$Region, "POT" = tmp$Value, GT = g)
+  tmp  <- data.frame(Country = tmp$Region, "POT-NOLIM" = tmp$Value, GT = g)
   data <- merge(data, tmp)
   
   tmp  <- as.data.frame(dimSums(wat_ag_wwEconPOTUNSUScomAg[,,"off"][,,g], dim = c(1.1, 1.2)))
@@ -1410,16 +1130,25 @@ for (g in gt) {
   i <- i + 1
 }
 
+PIAout  <- PIA
+PIWWout <- PIWW
+PIWCout <- PIWC
+
+colnames(PIAout)  <- gsub("GT", "Yield gain threshold", colnames(PIAout))
+colnames(PIWWout) <- gsub("GT", "Yield gain threshold", colnames(PIWWout))
+colnames(PIWCout) <- gsub("GT", "Yield gain threshold", colnames(PIWCout))
+
 # Write country results to csv
-write.csv(x = PIA, 
+write.csv(x = PIAout, 
           file = paste0(outputdatapath, "PIA_bycountry_a.csv"), 
           row.names = FALSE)
-write.csv(x = PIWW, 
+write.csv(x = PIWWout, 
           file = paste0(outputdatapath, "PIWW_bycountry_a.csv"), 
           row.names = FALSE)
-write.csv(x = PIWC, 
+write.csv(x = PIWCout, 
           file = paste0(outputdatapath, "PIWC_bycountry_a.csv"),
           row.names = FALSE)
+rm(PIAout, PIWWout, PIWCout)
 
 ```
 
@@ -1428,7 +1157,7 @@ write.csv(x = PIWC,
 tmp <- NULL
 for (g in c(0, 300, 600)) {
   
-  global <- data.frame(Scenario = "IRR", 
+  global <- data.frame(Scenario = "IRR-NOLIM", 
                        PIA = round(sum(PIA$IRR[PIA$GT==g])), 
                        PIWC = round(sum(PIWC$IRR[PIWC$GT==g])), 
                        PIWW = round(sum(PIWW$IRR[PIWW$GT==g])))
@@ -1453,7 +1182,7 @@ for (g in c(0, 300, 600)) {
                              PIWC = round(sum(PIWC$IRR.SUS[PIWC$GT==g])), 
                              PIWW = round(sum(PIWW$IRR.SUS[PIWW$GT==g]))))
   global <- rbind(global, 
-                  data.frame(Scenario = "CUR", 
+                  data.frame(Scenario = "CUR-NOLIM", 
                              PIA = round(sum(PIA$CUR[PIA$GT==g])), 
                              PIWC = round(sum(PIWC$CUR[PIWC$GT==g])), 
                              PIWW = round(sum(PIWW$CUR[PIWW$GT==g]))))
@@ -1478,7 +1207,7 @@ for (g in c(0, 300, 600)) {
                              PIWC = round(sum(PIWC$CUR.SUS[PIWC$GT==g])), 
                              PIWW = round(sum(PIWW$CUR.SUS[PIWW$GT==g]))))
   global <- rbind(global, 
-                  data.frame(Scenario = "POT", 
+                  data.frame(Scenario = "POT-NOLIM", 
                              PIA = round(sum(PIA$POT[PIA$GT==g])), 
                              PIWC = round(sum(PIWC$POT[PIWC$GT==g])), 
                              PIWW = round(sum(PIWW$POT[PIWW$GT==g]))))
@@ -1551,8 +1280,10 @@ landMask       <- terra::symdif(landMask, worldCountries)
 }
 ```
 
-For visualization purposes, areas with very little cropland area (cropland < 1 percent of cell area) are excluded from maps showing current areas.
-For maps showing potential cropland areas, areas with potential irrigation area < 1 percent of the cell area are excluded. 
+For visualization purposes, areas with very little cropland area 
+(cropland < 1 percent of cell area) are excluded from maps showing current areas.
+For maps showing potential cropland areas, 
+areas with potential irrigation area < 1 percent of the cell area are excluded. 
 
 ```{r ExclusionOfSmallAreas, include=FALSE, echo=FALSE}
 
@@ -1571,7 +1302,10 @@ irrigcellshare    <- avlArea / cellarea
 
 # Current Irrigation
 
-The Fulfilled-Share-Map shows the share of current irrigation water demand under full irrigation requirements (IRR-NOLIM) that can be fulfilled by locally available renewable water resources captured in our data set (IRR-UNSUS). 
+The Fulfilled-Share-Map shows the share of current irrigation water demand under 
+full irrigation requirements (IRR-NOLIM) 
+that can be fulfilled by locally available renewable water resources 
+captured in our data set (IRR-UNSUS). 
 
 ```{r ReadInCurrent, include=FALSE, echo=FALSE}
 # Input data
@@ -1587,8 +1321,8 @@ x[croplandcellshare < 0.01] <- NA
 x1 <- .toolRasterTransform(x)
 
 # Plot settings
-legendcolor  <- c("#a50026", "#d73027", "#f46d43", "#fdae61", "#fee090",
-                  "#e0f3f8", "#abd9e9", "#74add1", "#4575b4", "#313695") 
+legendcolor  <- c("#7f0000", "#b30000", "#d7301f", "#ef6548", "#fc8d59",
+                  "#fdbb84", "#fdd49e", "#fee8c8", "#fff7ec", "#045a8d")
 colNA        <- "#d9d9d9"
 legendlimit  <- c(0, 1)
 legendbreaks <- seq(0, 1, 0.1)
@@ -1599,7 +1333,7 @@ pdf(paste0(outputdatapath, input, ".pdf"), width = 26, height = 15)
 
   # Main plot
   plot(landMask, col = "white", border = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
-  plot(x1, ylim = ylim, xlim = xlim,  asp = NA, axes = FALSE, 
+  plot(x1, border = "white", ylim = ylim, xlim = xlim,  asp = NA, axes = FALSE, 
        legend = FALSE,
        col = legendcolor,
        colNA = colNA,
@@ -1629,7 +1363,7 @@ dev.off()
 # Technical Irrigation Potentials
 
 The Technical Irrigation Potentials map shows the irrigation potential 
-at a yield value gain threshold of 0 
+at a yield gain threshold of 0 
 on current cropland (b) and 
 potential cropland (c) 
 compared to actually irrigated areas according to LUH (a). 
@@ -1648,13 +1382,17 @@ a[irrigcellshare == 0] <- NA
 b[irrigcellshare == 0] <- NA
 c[irrigcellshare == 0] <- NA
 
+a[a == 0] <- NA
+b[b == 0] <- NA
+c[c == 0] <- NA
+
 # Legend range adjustment (cell share rather than Mha)
 a <- a / cellarea
 b <- b / cellarea
 c <- c / cellarea
 legendtitle  <- "Cellshare"
 legendbreaks <- seq(0, 1, 0.125)
-legendcolor  <- c("#FFFFFF", "#c7e9c0", "#a1d99b", 
+legendcolor  <- c("#e5f5e0", "#c7e9c0", "#a1d99b", 
                   "#74c476", "#41ab5d", "#238b45", "#006d2c", "#00441b")
 
 # Transform magpie object to raster object
@@ -1680,7 +1418,7 @@ plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = 
 plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
 title("(a) Currently irrigated areas", outer = FALSE, cex.main = 2.5, line = 0.5)
 
-### Graph 2: Potentially Irrigated Areass (sustainable) on current cropland
+### Graph 2: Potentially Irrigated Areas (sustainable) on current cropland
 plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
 plot(b, ylim = ylim, xlim = xlim,
      legend       = FALSE,
@@ -1692,7 +1430,7 @@ plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = 
 plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
 title("(b) Potentially Irrigated Areas on current cropland", outer = FALSE, cex.main = 2.5, line = 0.5)
 
-### Graph 3: Potentially Irrigated Areass (sustainable) on potential cropland
+### Graph 3: Potentially Irrigated Areas (sustainable) on potential cropland
 plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
 plot(c, ylim = ylim, xlim = xlim,
      legend       = FALSE,
@@ -1845,10 +1583,8 @@ valuessus <- c(x0_000_025sus, x0_025_050sus, x0_050_075sus, x0_075_010sus,
           x1000_000_025sus, x1000_025_050sus, x1000_050_075sus, x1000_075_010sus)
 
 .boxes <- function(position = c(0, 0, 0.25, 1), color = "#edf8fb", text = "some Mha") {
-
-rect(position[1], position[2], position[3], position[4], border = "black", col = color)
-text(mean(c(position[1], position[3])), mean(c(position[2], position[4])), text, cex = 3.5)
-
+  rect(position[1], position[2], position[3], position[4], border = "black", col = color)
+  text(min(c(position[1], position[3]))+0.03, mean(c(position[2], position[4])), text, cex = 3.5, adj = c(0, 0.5))
 }
 
 ```
@@ -1987,14 +1723,14 @@ text(550, 200, "POT-SUS", col = "black", cex = 3)
 axis(side = 1, cex.axis = 3, hadj = 0.5, padj = 0.5,
    at = c(seq(from = 0, to = max(potCropland1$x), by = 500))) # x axis
 axis(side = 2, cex.axis = 3, hadj = 1, padj = 0.5,
-   at = c(seq(from = 0, to = 3000, by = 250)), las = 1)      # y axis
+   at = c(seq(from = 0, to = 3000, by = 300)), las = 1)      # y axis
 mtext("Irrigation yield gain (in USD/ha)", side = 2, line = 7, cex = 3.5)
 mtext("Irrigated area (in Mha)", side = 1, line = 5.5, cex = 3.5)
 #title("Global \nPotentially Irrigated Areas \non potential cropland", cex.main = 3, line = -5, adj = 0.1)
 title("c)", cex.main = 4.5, line = 2, adj = 0)
 
 # Legend UNSUS
-par(mar = c(1, 1, 1, 1), fig = c(0.5, 0.98, 0.6, 0.9), new = TRUE)
+par(mar = c(1, 1, 1, 1), fig = c(0.6, 0.9, 0.6, 0.9), new = TRUE)
 plot(c(0, 1), c(0, 3), type = "n", xlab = "", ylab = "", axes = FALSE)
 axis(side = 1, col = NA, col.ticks = NA, at = legendbreaks, cex.axis = 3, padj = 0.6)
 axis(side = 2, col = NA, col.ticks = NA, at = c(1, 2, 3), cex.axis = 3,
@@ -2002,19 +1738,19 @@ axis(side = 2, col = NA, col.ticks = NA, at = c(1, 2, 3), cex.axis = 3,
                            paste0(">", middle, "-", high, "USD/ha"), 
                            paste0(">", high, "USD/ha")), 
    las = 2)
-mtext("POT-UNSUS", side = 3, line = 0.5, cex = 3.8)
+mtext("PIA for POT-UNSUS (in Mha)", side = 3, line = 0.5, cex = 3.5)
 
 i <- 0
 for (threshold in c(1, 2, 3)) {
 for (share in c(0.25, 0.5, 0.75, 1)) {
   i <- i + 1
   .boxes(position = c(share-0.25, threshold-1, share, threshold),
-         color = colors[i], text = paste0(round(values[i]), " Mha"))
+         color = colors[i], text = paste0(round(values[i]), ""))
  }
 }
 
 # Legend SUS
-par(mar = c(1, 1, 1, 1), fig = c(0.5, 0.98, 0.15, 0.45), new = TRUE)
+par(mar = c(1, 1, 1, 1), fig = c(0.6, 0.9, 0.15, 0.45), new = TRUE)
 plot(c(0, 1), c(0, 3), type = "n", xlab = "", ylab = "", axes = FALSE)
 axis(side = 1, col = NA, col.ticks = NA, at = legendbreaks, cex.axis = 3, padj = 0.6)
 axis(side = 2, col = NA, col.ticks = NA, at = c(1, 2, 3), cex.axis = 3,
@@ -2022,14 +1758,16 @@ axis(side = 2, col = NA, col.ticks = NA, at = c(1, 2, 3), cex.axis = 3,
                            paste0(">", middle, "-", high, "USD/ha"), 
                            paste0(">", high, "USD/ha")), 
    las = 2)
-mtext("Cell share", side = 1, line = 6, cex = 3.8)
-mtext("POT-SUS", side = 3, line = 0.5, cex = 3.8)
+mtext("Cell share", side = 1, line = 6, cex = 3.2)
+mtext("PIA for POT-SUS (in Mha)", side = 3, line = 0.5, cex = 3.5)
+
+
 i <- 0
 for (threshold in c(1, 2, 3)) {
 for (share in c(0.25, 0.5, 0.75, 1)) {
   i <- i + 1
   .boxes(position = c(share-0.25, threshold-1, share, threshold),
-         color = colors[i], text = paste0(round(valuessus[i]), " Mha"))
+         color = colors[i], text = paste0(round(valuessus[i]), ""))
  }
 }
 
@@ -2042,7 +1780,8 @@ dev.off()
 
 ## Discharge Accessibility
 
-The more variable the discharge, the harder it is accessible to humans. This graph visualizes the relationship between discharge and accessibility.
+The more variable the discharge, the harder it is accessible to humans. 
+This graph visualizes the relationship between discharge and accessibility.
 
 ```{r FunctionalRelationshipGraph, include=FALSE, echo=FALSE}
 # Inputdata
@@ -2083,14 +1822,13 @@ for (y in year) {
 x <- seq(min(cv), max(cv), by = 1)
 
 ### Create and save plot ###
-pdf(paste0("outputs/AccessibilityRule.pdf"), height = 21.0, width = 29.7, paper = "a4r")
+pdf(paste0(outputdatapath, "AccessibilityRule", ".pdf"), height = 21.0, width = 29.7, paper = "a4r")
 par(mfrow = c(2, 1),
     mar = c(4.1, 4.1, 4.1, 2.1))
 
 hist(cv, breaks = 100, main = NULL,
      xlab = "Coefficient of variation of monthly discharge (std.deviation/mean)",
      ylab = "Frequency (Number of grid cells)",
-      #ylim = c(0,19),
      yaxs = "i",
     col = "lightblue")
 axis(side = 1, at = seq(min(cv), max(cv), by = 1)) # x axis
@@ -2131,13 +1869,12 @@ protectArea <- collapseNames(read.magpie(paste0(inputdatapath, "protectedAreas.m
 
 # Cell share that is protected
 protectArea <- protectArea / cellarea
-protectArea[protectArea > 1] <- 1
 
 # Plot Fulfilled Share
 legendtitle  <- "Protected Share"
-legendbreaks <- seq(0, 1, 0.1)
-legendcolor  <- c("#FFFFFF", "#f7fcb9", "#e5f5e0", "#c7e9c0", "#a1d99b",
-                  "#74c476", "#41ab5d", "#238b45", "#006d2c", "#00441b")
+legendbreaks <- seq(0, 1, 0.125)
+legendcolor  <- c("#FFFFFF", "#d9f0a3", "#addd8e",
+                  "#78c679", "#41ab5d", "#238443", "#006837", "#004529")
 
 # Transform magpie object to raster object
 protectArea <- .toolRasterTransform(protectArea)
@@ -2173,20 +1910,33 @@ dev.off()
 
 ```
 
-## Yield gain (in USD/ha)
+## Validation of yield gain (in USD/ha)
 
 ```{r YieldGain, include=TRUE, echo=FALSE}
 
-# Yield value gain in USD/ha
-yieldGain   <- dimSums(read.magpie(paste0(inputdatapath, "yieldgain_USDha", ".mz")), dim = 3)
-getSets(yieldGain) <- c("x", "y", "iso", "year", "data")
+# Yield gain in USD/ha with global average prices
+yieldGain_GLO   <- dimSums(read.magpie(paste0(inputdatapath, "yieldgain_USDha_GLO", ".mz")), dim = 3)
+yieldGain_ISO   <- dimSums(read.magpie(paste0(inputdatapath, "yieldgain_USDha_ISO", ".mz")), dim = 3)
+yieldGain_const <- dimSums(read.magpie(paste0(inputdatapath, "yieldgain_USDha_constant", ".mz")), dim = 3)
+
+getSets(yieldGain_GLO)   <- c("x", "y", "iso", "year", "data")
+getSets(yieldGain_ISO)   <- c("x", "y", "iso", "year", "data")
+getSets(yieldGain_const) <- c("x", "y", "iso", "year", "data")
+
+# Summary statistics
+summary(yieldGain_GLO)
+summary(yieldGain_ISO)
+summary(yieldGain_const)
+
+# For the main results, we use global average food prices:
+yieldGain <- yieldGain_GLO
 
 # Area masks (ACT, CUR, POT with sufficient water)
-yldGainACT <- dimSums(yieldGain * IrrigAreaEconIRRUNSUS[,,"0.off"], dim = 1) / dimSums(IrrigAreaEconIRRUNSUS[,,"0.off"], dim = 1)
-yldGainCUR <- dimSums(yieldGain * IrrigAreaEconCURUNSUS[,,"0.off"], dim = 1) / dimSums(IrrigAreaEconCURUNSUS[,,"0.off"], dim = 1)
+yldGainACT   <- dimSums(yieldGain * IrrigAreaEconIRRUNSUS[,,"0.off"], dim = 1) / dimSums(IrrigAreaEconIRRUNSUS[,,"0.off"], dim = 1)
+yldGainCUR   <- dimSums(yieldGain * IrrigAreaEconCURUNSUS[,,"0.off"], dim = 1) / dimSums(IrrigAreaEconCURUNSUS[,,"0.off"], dim = 1)
 yldGainCURrf <- dimSums(yieldGain * (collapseNames(IrrigAreaEconCURUNSUS[,,"0.off"])-LUHirrigated), dim = 1) /
                             dimSums((collapseNames(IrrigAreaEconCURUNSUS[,,"0.off"])-LUHirrigated), dim = 1)
-yldGainPOT <- dimSums(yieldGain * IrrigAreaEconPOTUNSUS[,,"0.off"], dim = 1) / dimSums(IrrigAreaEconPOTUNSUS[,,"0.off"], dim = 1)
+yldGainPOT    <- dimSums(yieldGain * IrrigAreaEconPOTUNSUS[,,"0.off"], dim = 1) / dimSums(IrrigAreaEconPOTUNSUS[,,"0.off"], dim = 1)
 yldGainPOTsus <- dimSums(yieldGain * IrrigAreaEconPOTSUS[,,"0.off"], dim = 1) / dimSums(IrrigAreaEconPOTSUS[,,"0.off"], dim = 1)
 
 # Area masks (ACT, CUR, POT)
@@ -2197,35 +1947,73 @@ tmpPotTotal <- dimSums(yieldGain * yieldgainareaPOTunsus[,,"0"], dim = 1) / dimS
 tmpPotSus   <- dimSums(yieldGain * yieldgainareaPOTsus[,,"0"], dim = 1) / dimSums(yieldgainareaPOTsus[,,"0"], dim = 1)
 
 # In-text numbers (global)
-writeLines(paste0("The average yield value gain on currently irrigated areas is ", round(tmpIrrig, digits = 1), "USD per hectare.", 
-"\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield value gain on currently irrigated areas is ", round(yldGainACT),                 
-"\nThe average yield value gain on current cropland is ", round(mean(tmpCropland), digits = 1), "USD per hectare.",
-"\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield value gain on current croparea is ", round(yldGainCUR),  
-"\nThe average yield value gain on current cropland that is currently not under irrigation, \nbut would be irrigated according to our algorithm is ", round(mean(yldGainCURrf), digits = 1), "USD per hectare.",
-"\nThe average yield value gain on currently rainfed cropland is ", round(mean(tmpRainfed), digits = 1), "USD per hectare.",
-"\nThe average yield value gain on total potential cropland is ", round(mean(tmpPotTotal), digits = 1), ".",
-"\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield value gain on potential cropland areas is ", round(yldGainPOT),
-"\nThe average yield value gain on potential (unprotected) cropland is ", round(mean(tmpPotSus), digits = 1), ".",
-"\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield value gain on potential cropland areas is ", round(yldGainPOTsus)))
+writeLines(paste0("The average yield  gain on currently irrigated areas is ", round(tmpIrrig, digits = 1), "USD per hectare.", 
+"\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield gain on currently irrigated areas is ", round(yldGainACT),                 
+"\nThe average yield gain on current cropland is ", round(mean(tmpCropland), digits = 1), "USD per hectare.",
+"\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield gain on current croparea is ", round(yldGainCUR),  
+"\nThe average yield gain on current cropland that is currently not under irrigation, \nbut would be irrigated according to our algorithm is ", round(mean(yldGainCURrf), digits = 1), "USD per hectare.",
+"\nThe average yield gain on currently rainfed cropland is ", round(mean(tmpRainfed), digits = 1), "USD per hectare.",
+"\nThe average yield gain on total potential cropland is ", round(mean(tmpPotTotal), digits = 1), ".",
+"\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield gain on potential cropland areas is ", round(yldGainPOT),
+"\nThe average yield gain on potential (unprotected) cropland is ", round(mean(tmpPotSus), digits = 1), ".",
+"\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield gain on potential cropland areas is ", round(yldGainPOTsus)))
 
 
-# Set 0 to NA:
-yieldGain[yieldGain <= 0] <- NA
+# Spearman correlation
+corrAandB <- round(cor.test(yieldGain_GLO, yieldGain_ISO, method = "spearman")$estimate, digits = 4)
+corrAandC <- round(cor.test(yieldGain_GLO, yieldGain_const, method = "spearman")$estimate, digits = 4)
+
+# Area-weighted histogram
+yieldGain_GLO[yieldGain_GLO > 1200]     <- 1200
+yieldGain_ISO[yieldGain_ISO > 1200]     <- 1200
+yieldGain_const[yieldGain_const > 1200] <- 1200
+
+
+pdf(paste0(outputdatapath, "Histograms_yieldvaluegain", ".pdf"), height = 15, width = 29.7, paper = "a4r")
+par(mfrow = c(1, 3), mar = c(5,8,3,2))
+weighted.hist(x = yieldGain_GLO, w = yieldgainareaPOTunsus[,,"0"],
+              breaks = c(0, 200, 400, 600, 800, 1000, 1200), ylim = c(0, 3000), col = "#fcbba1", 
+              main = "(a) Global average commodity prices\n", ylab = "Yield gain area (in Mha)\n", 
+              cex.lab = 2, cex.axis = 1.5, cex.names = 6, cex.main = 1.5)
+weighted.hist(x = yieldGain_ISO, w = yieldgainareaPOTunsus[,,"0"], 
+              breaks = c(0, 200, 400, 600, 800, 1000, 1200), ylim = c(0, 3000), col = "#fcbba1", 
+              main = "(b) Country-level commodity prices\n", ylab = "", 
+              cex.axis = 1.5, cex.names = 6, cex.main = 1.5)
+text(x = 800, y = 2500, paste0("Spearman's rho: \n", corrAandB), cex = 2)
+weighted.hist(x = yieldGain_const, w = yieldgainareaPOTunsus[,,"0"], 
+              breaks = c(0, 200, 400, 600, 800, 1000, 1200), ylim = c(0, 3000), col = "#fcbba1", 
+              main = "(c) Constant global price\n", ylab = "", 
+              cex.axis = 1.5, cex.names = 6, cex.main = 1.5)
+text(x = 800, y = 2500, paste0("Spearman's rho: \n", corrAandC), cex = 2)
+par(mfrow = c(1, 1))
+dev.off()
+
 
 # Legend
 legendbreaks <- c(0, 100, 300, 500, 700, 900, 1000)
-legendcolor <- c("#FFFFFF", "#fdbb84", "#fc8d59", "#d7301f", "#b30000", "#7f0000")
+legendbreaks <- c(0, 200, 400, 600, 800, 1000, 1200)
+legendcolor  <- c("#FFFFFF", "#fdbb84", "#fc8d59", "#d7301f", "#b30000", "#7f0000")
 
 # Transform magpie object to raster object
-yieldGain <- .toolRasterTransform(yieldGain)
+yieldGain_GLO   <- .toolRasterTransform(yieldGain_GLO)
+yieldGain_ISO   <- .toolRasterTransform(yieldGain_ISO)
+yieldGain_const <- .toolRasterTransform(yieldGain_const)
 
-yieldGain[yieldGain < 0]     <- 0
-yieldGain[yieldGain >= 1000] <- 999
+yieldGain_GLO[yieldGain_GLO < 0]     <- 0
+yieldGain_GLO[yieldGain_GLO >= 1200] <- 1199
 
+yieldGain_ISO[yieldGain_ISO < 0]     <- 0
+yieldGain_ISO[yieldGain_ISO >= 1200] <- 1199
+
+yieldGain_const[yieldGain_const < 0]     <- 0
+yieldGain_const[yieldGain_const >= 1200] <- 1199
+
+
+# Global average prices:
 jpeg(paste0(outputdatapath, "Yields", ".jpeg"), width = 8, height = 4.5, units = "in", res = 400)
 
 plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
-plot(yieldGain, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE,
+plot(yieldGain_GLO, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE,
      legend       = FALSE,
      col          = legendcolor,
      breaks       = legendbreaks,
@@ -2235,7 +2023,63 @@ plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = 
 plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
 
 # Legend
-plot(yieldGain, bg = "transparent",
+plot(yieldGain_GLO, bg = "transparent",
+     legend.only   = TRUE,
+     horizontal    = TRUE,
+     col           = legendcolor,
+     breaks        = legendbreaks,
+     colNA         = "transparent",
+     legend.args   = list(text = "USD per ha", side = 3, font = 1, line = 0.5, cex = 1),
+     axis.args     = list(cex.axis = 0.8, at = legendbreaks, line = 0, tick = FALSE, hadj = 0.4, padj = -1.5),
+     smallplot     = c(0.4, 0.75, 0.1, 0.15),
+     add = T)
+
+dev.off()
+
+
+# Global average prices:
+jpeg(paste0(outputdatapath, "Yields_iso", ".jpeg"), width = 8, height = 4.5, units = "in", res = 400)
+
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
+plot(yieldGain_ISO, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE,
+     legend       = FALSE,
+     col          = legendcolor,
+     breaks       = legendbreaks,
+     colNA        = colNA,
+     add          = T)
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+
+# Legend
+plot(yieldGain_ISO, bg = "transparent",
+     legend.only   = TRUE,
+     horizontal    = TRUE,
+     col           = legendcolor,
+     breaks        = legendbreaks,
+     colNA         = "transparent",
+     legend.args   = list(text = "USD per ha", side = 3, font = 1, line = 0.5, cex = 1),
+     axis.args     = list(cex.axis = 0.8, at = legendbreaks, line = 0, tick = FALSE, hadj = 0.4, padj = -1.5),
+     smallplot     = c(0.4, 0.75, 0.1, 0.15),
+     add = T)
+
+dev.off()
+
+
+# Global average prices:
+jpeg(paste0(outputdatapath, "Yields_constant", ".jpeg"), width = 8, height = 4.5, units = "in", res = 400)
+
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
+plot(yieldGain_const, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE,
+     legend       = FALSE,
+     col          = legendcolor,
+     breaks       = legendbreaks,
+     colNA        = colNA,
+     add          = T)
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+
+# Legend
+plot(yieldGain_const, bg = "transparent",
      legend.only   = TRUE,
      horizontal    = TRUE,
      col           = legendcolor,
