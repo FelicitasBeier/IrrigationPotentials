@@ -1158,9 +1158,9 @@ tmp <- NULL
 for (g in c(0, 300, 600)) {
   
   global <- data.frame(Scenario = "IRR-NOLIM", 
-                       PIA = round(sum(PIA$IRR[PIA$GT==g])), 
-                       PIWC = round(sum(PIWC$IRR[PIWC$GT==g])), 
-                       PIWW = round(sum(PIWW$IRR[PIWW$GT==g])))
+                       PIA = round(sum(PIA$IRR.NOLIM[PIA$GT==g])), 
+                       PIWC = round(sum(PIWC$IRR.NOLIM[PIWC$GT==g])), 
+                       PIWW = round(sum(PIWW$IRR.NOLIM[PIWW$GT==g])))
   global <- rbind(global, 
                   data.frame(Scenario = "IRR-UNSUS", 
                              PIA = round(sum(PIA$IRR.UNSUS[PIA$GT==g])), 
@@ -1183,9 +1183,9 @@ for (g in c(0, 300, 600)) {
                              PIWW = round(sum(PIWW$IRR.SUS[PIWW$GT==g]))))
   global <- rbind(global, 
                   data.frame(Scenario = "CUR-NOLIM", 
-                             PIA = round(sum(PIA$CUR[PIA$GT==g])), 
-                             PIWC = round(sum(PIWC$CUR[PIWC$GT==g])), 
-                             PIWW = round(sum(PIWW$CUR[PIWW$GT==g]))))
+                             PIA = round(sum(PIA$CUR.NOLIM[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$CUR.NOLIM[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$CUR.NOLIM[PIWW$GT==g]))))
   global <- rbind(global, 
                   data.frame(Scenario = "CUR-UNSUS", 
                              PIA = round(sum(PIA$CUR.UNSUS[PIA$GT==g])), 
@@ -1208,9 +1208,9 @@ for (g in c(0, 300, 600)) {
                              PIWW = round(sum(PIWW$CUR.SUS[PIWW$GT==g]))))
   global <- rbind(global, 
                   data.frame(Scenario = "POT-NOLIM", 
-                             PIA = round(sum(PIA$POT[PIA$GT==g])), 
-                             PIWC = round(sum(PIWC$POT[PIWC$GT==g])), 
-                             PIWW = round(sum(PIWW$POT[PIWW$GT==g]))))
+                             PIA = round(sum(PIA$POT.NOLIM[PIA$GT==g])), 
+                             PIWC = round(sum(PIWC$POT.NOLIM[PIWC$GT==g])), 
+                             PIWW = round(sum(PIWW$POT.NOLIM[PIWW$GT==g]))))
   global <- rbind(global, 
                   data.frame(Scenario = "POT-UNSUS", 
                              PIA = round(sum(PIA$POT.UNSUS[PIA$GT==g])), 
