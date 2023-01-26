@@ -5,7 +5,7 @@ date: "`r Sys.Date()`"
 output: pdf_document
 ---
 
-```{r Setup, include=FALSE}
+```{r Setup, include = FALSE}
 # R markdown set-up
 knitr::opts_chunk$set(echo = TRUE)
 
@@ -24,17 +24,18 @@ library(terra)
 library(sf) 
 
 # plot functions
+library(mrwaterplots)
 library(ggplot2)
 library(ggpubr)
-library(plotrix)
+library(weights)
 
 # tables
 library(xtable) # latex
 
 ```
 
-```{r Settings0, include=FALSE}
-version  <- "mrwaterFullOutputs_resubmission"
+```{r Settings0, include = FALSE}
+version  <- "mrwaterFullOutputs_USDm3"
 year     <- "y2010"
 scenario <- "ssp2"
 
@@ -49,13 +50,15 @@ outputdatapath <- paste0(getwd(), "/outputs/", version, "/")
 
 ```{r ReadinCurrent, include = FALSE, echo = FALSE}
 # Current cropland and currently irrigated areas according to LUH
-LUHarea      <- setYears(dimSums(collapseNames(read.magpie(paste0(inputdatapath, "cropareaLUH", ".mz"))), 
-                                 dim = "crop"), year) 
-LUHirrigated <- collapseNames(LUHarea[, , "irrigated"])
-LUHtotal     <- dimSums(LUHarea, dim = "irrigation")
+currentCroparea          <- setYears(read.magpie(paste0(inputdatapath, "cropareaLUH", ".mz")), 
+                                     year) 
+currentCropland          <- dimSums(currentCroparea, dim = "crop")
+currentCroplandIrrigated <- collapseNames(currentCropland[, , "irrigated"])
+currentCroplandTotal     <- dimSums(currentCropland, dim = "irrigation")
+cropareaShr              <- read.magpie(paste0(inputdatapath, "cropareaShr.mz"))
 
 # Current irrigated area with EFR=on and off
-irrigAreaCurrent <- collapseNames(read.magpie(paste0(inputdatapath, "irrigAreaCurrent.mz"))[,,scenario][,,"irrigatable"])
+irrigAreaCurrent <- collapseNames(read.magpie(paste0(inputdatapath, "irrigAreaCurrent.mz"))[, , scenario][, , "irrigatable"])
 
 # water committed to current agricultural use (in mio. m^3) 
 watComAg     <- dimSums(read.magpie(paste0(inputdatapath, "watComAg", ".mz")), dim = "crop")
@@ -64,30 +67,45 @@ watComAgWW   <- collapseNames(watComAg[,,"withdrawal"]) / 1000
 watComAgWC   <- collapseNames(watComAg[,,"consumption"]) / 1000
 
 # Committed agricultural fulfilled uses (in mio. km^3)
-comAgWW      <- collapseNames(read.magpie(paste0(inputdatapath, "comAguses.mz"))[,,scenario][,,"currHuman_ww"]) / 1000
-comAgWC      <- collapseNames(read.magpie(paste0(inputdatapath, "comAguses.mz"))[,,scenario][,,"currHuman_wc"]) / 1000
+comAgWW      <- collapseNames(read.magpie(paste0(inputdatapath, "comAguses.mz"))[,,scenario][,,"currHumanWWtotal"]) / 1000
+comAgWC      <- collapseNames(read.magpie(paste0(inputdatapath, "comAguses.mz"))[,,scenario][,,"currHumanWCtotal"]) / 1000
 comAgWCoff   <- collapseNames(comAgWC[,,"off"])
 comAgWCon    <- collapseNames(comAgWC[,,"on"])
 
 # Non-agricultural uses (in mio. km^3)
-watNonAgWW   <- collapseNames(read.magpie(paste0(inputdatapath, "nonAguses.mz"))[,,scenario][,,"currHuman_ww"]) / 1000
-watNonAgWC   <- collapseNames(read.magpie(paste0(inputdatapath, "nonAguses.mz"))[,,scenario][,,"currHuman_wc"]) / 1000
+watNonAgWW   <- collapseNames(read.magpie(paste0(inputdatapath, "nonAguses.mz"))[,,scenario][,,"currHumanWWtotal"]) / 1000
+watNonAgWC   <- collapseNames(read.magpie(paste0(inputdatapath, "nonAguses.mz"))[,,scenario][,,"currHumanWCtotal"]) / 1000
 ```
 
-```{r ReportCurrentArea, include=TRUE, echo=FALSE}
-writeLines(paste0("Globally, an area of ", round(dimSums(LUHirrigated, dim = 1)), " Mha is reported to be irrigated according to LUH. \nOf these irrigated areas, ", round(dimSums(irrigAreaCurrent[,,"off"], dim = 1)), " Mha could be fulfilled \ngiven the local water availability in this study. \nIF EFR were to be maintained, it would be ", round(dimSums(irrigAreaCurrent[,,"on"], dim = 1)), " Mha.")) 
+```{r ReportCurrentArea, include = TRUE, echo = FALSE}
+writeLines(paste0("Globally, an area of ",
+                  round(dimSums(currentCroplandIrrigated, dim = 1)),
+                  " Mha is reported to be irrigated according to LUH. \nOf these irrigated areas, ",
+                  round(dimSums(irrigAreaCurrent[,,"off"], dim = 1)),
+                  " Mha could be fulfilled \ngiven the local water availability in this study. \nIF EFR were to be maintained, it would be ",
+                  round(dimSums(irrigAreaCurrent[,,"on"], dim = 1)), " Mha.")) 
 ```
 
-```{r ReportCurrentVolume, include=TRUE, echo=FALSE}
-writeLines(paste0("Globally, a consumptive water volume of ", round(dimSums(watComAgWC, dim = 1)), " km3/yr is required to irrigate \nthe given cropmix (FAO country-level production pattern of 2010) on currently irrigated areas to its full potential. \nOf these irrigation water requirements, ", round(dimSums(comAgWCoff, dim = 1)), " km3/yr could be fulfilled \ngiven the local water availability in this study. \nThis volume would be reduced to ", round(dimSums(comAgWCon, dim = 1)), " km3/yr if the EFR were to be maintained."))
+```{r ReportCurrentVolume, include = TRUE, echo = FALSE}
+writeLines(paste0("Globally, a consumptive water volume of ",
+                  round(dimSums(watComAgWC, dim = 1)),
+                  " km3/yr is required to irrigate \nthe given cropmix (FAO country-level production pattern of 2010) on currently irrigated areas to its full potential. \nOf these irrigation water requirements, ",
+                  round(dimSums(comAgWCoff, dim = 1)),
+                  " km3/yr could be fulfilled \ngiven the local water availability in this study. \nThis volume would be reduced to ",
+                  round(dimSums(comAgWCon, dim = 1)),
+                  " km3/yr if the EFR were to be maintained."))
 ```
 
 To calculate total (un)sustainable water uses in order to compare the value with the planetary boundary, 
 the following non-agricultural uses have to be added to the Irrigation Potentials, respectively:
 
-```{r NonAgUses, include=TRUE, echo=FALSE}
-print(paste0("Global non-ag. consumption (unsustainable): ", round(dimSums(watNonAgWC[,,"off"], dim = 1)), " km^3/yr"))
-print(paste0("Global non-ag. consumption (sustainable): ", round(dimSums(watNonAgWC[,,"on"], dim = 1)), " km^3/yr"))
+```{r NonAgUses, include = TRUE, echo = FALSE}
+print(paste0("Global non-ag. consumption (unsustainable): ",
+             round(dimSums(watNonAgWC[,,"off"], dim = 1)),
+             " km^3/yr"))
+print(paste0("Global non-ag. consumption (sustainable): ",
+             round(dimSums(watNonAgWC[,,"on"], dim = 1)),
+             " km^3/yr"))
 ```
 
 
@@ -106,7 +124,7 @@ today under irrigation (committed agricultural uses).
 They are also the basis for the country- and basin-level IAD curves and 
 economic PIA maps. 
 
-```{r SCENARIOdata, include=FALSE, echo=FALSE}
+```{r SCENARIOdata, include = FALSE, echo = FALSE}
 # Current irrigated area (IRR)
 IrrigAreaEconIRRSUS    <- read.magpie(paste0(inputdatapath, "IrrigAreaEconACTSUS", ".mz"))
 IrrigAreaEconIRRUNSUS  <- read.magpie(paste0(inputdatapath, "IrrigAreaEconACTUNSUS", ".mz"))
@@ -120,8 +138,8 @@ wat_ag_wwEconIRRUNSUS  <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconACTUNS
 yieldgainareaIRRunsus  <- read.magpie(paste0(inputdatapath, "yieldgainarea_actUNSUS.mz"))
 yieldgainareaIRRsus    <- read.magpie(paste0(inputdatapath, "yieldgainarea_actSUS.mz"))
 
-yieldgainwaterIRRunsus <- read.magpie(paste0(inputdatapath, "yieldgainwater_actUNSUS.mz")) / 1000
-yieldgainwaterIRRsus   <- read.magpie(paste0(inputdatapath, "yieldgainwater_actSUS.mz")) / 1000
+yieldgainwaterIRRunsus <- read.magpie(paste0(inputdatapath, "yieldgainwater_actUNSUS.mz"))
+yieldgainwaterIRRsus   <- read.magpie(paste0(inputdatapath, "yieldgainwater_actSUS.mz"))
 
 # Current cropland area (CUR)
 IrrigAreaEconCURSUS    <- read.magpie(paste0(inputdatapath, "IrrigAreaEconCURSUS", ".mz"))
@@ -136,8 +154,8 @@ wat_ag_wwEconCURUNSUS  <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconCURUNS
 yieldgainareaCURunsus  <- read.magpie(paste0(inputdatapath, "yieldgainarea_curUNSUS.mz"))
 yieldgainareaCURsus    <- read.magpie(paste0(inputdatapath, "yieldgainarea_curSUS.mz"))
 
-yieldgainwaterCURunsus <- read.magpie(paste0(inputdatapath, "yieldgainwater_curUNSUS.mz")) / 1000
-yieldgainwaterCURsus   <- read.magpie(paste0(inputdatapath, "yieldgainwater_curSUS.mz")) / 1000
+yieldgainwaterCURunsus <- read.magpie(paste0(inputdatapath, "yieldgainwater_curUNSUS.mz"))
+yieldgainwaterCURsus   <- read.magpie(paste0(inputdatapath, "yieldgainwater_curSUS.mz"))
 
 # Potential cropland area (POT)
 IrrigAreaEconPOTSUS    <- read.magpie(paste0(inputdatapath, "IrrigAreaEconPOTSUS", ".mz"))
@@ -152,15 +170,15 @@ wat_ag_wwEconPOTUNSUS  <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconPOTUNS
 yieldgainareaPOTunsus  <- read.magpie(paste0(inputdatapath, "yieldgainarea_potUNSUS.mz"))
 yieldgainareaPOTsus    <- read.magpie(paste0(inputdatapath, "yieldgainarea_potSUS.mz"))
 
-yieldgainwaterPOTunsus <- read.magpie(paste0(inputdatapath, "yieldgainwater_potUNSUS.mz")) / 1000
-yieldgainwaterPOTsus   <- read.magpie(paste0(inputdatapath, "yieldgainwater_potSUS.mz")) / 1000
+yieldgainwaterPOTunsus <- read.magpie(paste0(inputdatapath, "yieldgainwater_potUNSUS.mz"))
+yieldgainwaterPOTsus   <- read.magpie(paste0(inputdatapath, "yieldgainwater_potSUS.mz"))
 
 ```
 
 
-```{r OverviewTables, include=FALSE, echo=FALSE}
+```{r OverviewTables, include = FALSE, echo = FALSE}
 # Extract reported yield gain thresholds
-gt <- getNames(collapseNames(IrrigAreaEconIRRSUS[,,"on"]))
+gt <- getNames(collapseNames(IrrigAreaEconIRRSUS[, , "on"]))
 
 ## Irrigated Area (PIA = Potentially Irrigated Areas) [mio. ha]
 i <- 0
@@ -418,14 +436,14 @@ on currently irrigated areas (IRR), current (rainfed and irrigated) cropland (CU
 and potential cropland (POT).
 We distinguish three yield gain thresholds (0, 300 and 600 USD/ha).
 
-```{r GlobalOverviewTable, include=FALSE, echo=FALSE}
+```{r GlobalOverviewTable, include = FALSE, echo = FALSE}
 
 gtrange <- c(0, 300, 600)
 tmp <- NULL
 
 for (g in gtrange) {
   
-  global <- data.frame(Scenario = "IRR-NOLIM", 
+  global <- data.frame(Scenario = "IRR-NOLIM",
                        PIA = round(sum(PIA$IRR.NOLIM[PIA$GT==g])), 
                        PIWC = round(sum(PIWC$IRR.NOLIM[PIWC$GT==g])), 
                        PIWW = round(sum(PIWW$IRR.NOLIM[PIWW$GT==g])))
@@ -519,7 +537,7 @@ write.csv(x = global,
 ```
 
 
-```{r StackedBarplot, include=FALSE, echo=FALSE}
+```{r StackedBarplot, include = FALSE, echo = FALSE}
 
 # Arrange data for graph
 pia <-  data.frame(SusScen = gsub(".*-", "", tmp$Scenario), 
@@ -698,7 +716,7 @@ potYieldgain1     <- read.magpie(paste0(inputdatapath, "yieldgainarea_potUNSUS.m
 
 ```
 
-```{r PIAcurveFunctionFull, include=TRUE, echo=FALSE}
+```{r PIAcurveFunctionFull, include = TRUE, echo = FALSE}
 
 plotIADcurve <- function(version     = "HalfEarth",
                          aggregation = "countries",
@@ -730,10 +748,10 @@ plotIADcurve <- function(version     = "HalfEarth",
                      Group = df$IrrigArea,
                      IrrigArea = df$Value,
                      stringsAsFactors = FALSE)
-    df$LUHIrrigated <- rep(as.array(dimSums(LUHirrigated, dim = c(1.1, 1.2))), length(df$Group) /
-                             length(as.array(dimSums(LUHirrigated, dim = c(1.1, 1.2)))))
-    df$LUHCropland  <- rep(as.array(dimSums(LUHtotal, dim = c(1.1, 1.2))), length(df$Group) / 
-                             length(as.array(dimSums(LUHtotal, dim = c(1.1, 1.2)))))
+    df$currentCroplandIrrigated <- rep(as.array(dimSums(currentCroplandIrrigated, dim = c(1.1, 1.2))), length(df$Group) /
+                             length(as.array(dimSums(currentCroplandIrrigated, dim = c(1.1, 1.2)))))
+    df$LUHCropland  <- rep(as.array(dimSums(currentCroplandTotal, dim = c(1.1, 1.2))), length(df$Group) / 
+                             length(as.array(dimSums(currentCroplandTotal, dim = c(1.1, 1.2)))))
 
     df        <- df[df$Region %in%          c("CHN", "IND", "AUS", "USA", "MEX", "BRA", "ITA", "TUR", "SDN"), ]
     df$Region <- factor(df$Region, levels = c("CHN", "IND", "AUS", "USA", "MEX", "BRA", "ITA", "TUR", "SDN"))
@@ -782,10 +800,10 @@ plotIADcurve <- function(version     = "HalfEarth",
 
     tmp <- framestructure
     for (b in selectedBasins) {
-      tmp$Value[tmp$Region == b] <- dimSums(LUHirrigated[toolSelectRiverBasin(basinname = b), , ], dim = 1)
-      tmp$Value1[tmp$Region == b] <- dimSums(LUHtotal[toolSelectRiverBasin(basinname = b), , ], dim = 1)
+      tmp$Value[tmp$Region == b] <- dimSums(currentCroplandIrrigated[toolSelectRiverBasin(basinname = b), , ], dim = 1)
+      tmp$Value1[tmp$Region == b] <- dimSums(currentCroplandTotal[toolSelectRiverBasin(basinname = b), , ], dim = 1)
     }
-    df$LUHIrrigated <- tmp$Value
+    df$currentCroplandIrrigated <- tmp$Value
     df$LUHCropland  <- tmp$Value1
     df$Region <- factor(df$Region, levels = selectedBasins)
 
@@ -801,9 +819,9 @@ plotIADcurve <- function(version     = "HalfEarth",
   
   ### Plot ###
   out <- ggplot(df, aes(x = IrrigArea, y = GT, color = Group, group = Group, shape = Group)) +
-                geom_line(aes(linetype = Group), size = 1.5) +
+                geom_line(aes(linetype = Group), linewidth = 1.5) +
                 geom_point(aes(shape = Group), size = 3) +
-                geom_point(aes(x = LUHIrrigated, y = 0), size = 5, color = "black", shape = 17) +
+                geom_point(aes(x = currentCroplandIrrigated, y = 0), size = 5, color = "black", shape = 17) +
                 facet_wrap(~Region, scales = "free_x") +
                 # scale order:                   CUR-UNSUS   CUR-SUS,  POT-SUS      CUR-NOLIM
                 scale_color_manual(values =    c("#80cdc1", "#01665e", "#543005",  "#bf812d")) +
@@ -901,7 +919,7 @@ wat_ag_wwEconPOTUNSUScomAg <- read.magpie(paste0(inputdatapath, "wat_ag_wwEconPO
 
 ```{r OverviewTablesCOMAG, include=FALSE, echo=FALSE}
 # Extract reported yield gain thresholds
-gt <- getNames(collapseNames(IrrigAreaEconIRRSUScomAg[,,"on"]))
+gt <- getNames(collapseNames(IrrigAreaEconIRRSUScomAg[, , "on"]))
 
 ## Irrigated Area (PIA = Potentially Irrigated Areas) [mio. ha]
 i <- 0
@@ -1249,55 +1267,21 @@ write.csv(x = global,
 
 ## Maps
 
-The following section creates the maps using the Equal Earth projection
-to provide an equal area visualization.  
-
-```{r LandMaskTerra, include=FALSE}
-# Standard projection of MAgPIE object
-LatLonProj <- "+proj=longlat +datum=WGS84"
-# Equal Earth projection
-NewProj    <- "+proj=eqearth +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
-# Map extent
-ylim       <- c(-6500000, 8300000)
-xlim       <- c(-12577316, 15581284)
-
-### Handle vector data (country shape file and land mask) with terra package ###
-# Country borders from Natural Earth Data (http://www.naturalearthdata.com/downloads/10m-cultural-vectors/). accessed on Dec. 13th 2021
-worldCountries <- terra::vect(paste0(filepath, "ne_10m_admin_0_countries.shp"))
-worldCountries <- terra::project(worldCountries, NewProj)
-
-# Create land mask for pretty continent borders
-landMask       <- terra::as.polygons(ext(worldCountries))
-landMask       <- terra::symdif(landMask, worldCountries)
-
-# Note: terra cannot transform raster object to Equal-Earth projection yet
-.toolRasterTransform <- function(x) {
-  
-  x0  <- as.RasterBrick(x)
-  out <- raster::projectRaster(x0, crs = crs(NewProj), over = TRUE)
-
-  return(out)
-}
-```
-
 For visualization purposes, areas with very little cropland area 
 (cropland < 1 percent of cell area) are excluded from maps showing current areas.
 For maps showing potential cropland areas, 
 areas with potential irrigation area < 1 percent of the cell area are excluded. 
 
 ```{r ExclusionOfSmallAreas, include=FALSE, echo=FALSE}
-
-mapping            <- toolGetMapping("LPJ_CellBelongingsToCountries.csv", type = "cell")
-cellarea           <- (111e3 * 0.5) * (111e3 * 0.5) * cos(mapping$lat / 180 * pi) / 10000000000 # square meter -> Mha (1ha = 10000m^2)
-cellarea           <- as.magpie(cellarea, spatial = 1)
-magclass::getCells(cellarea) <- magclass::getCells(LUHtotal)
-
 # share of cropland of total cell area
-croplandcellshare <- LUHtotal / cellarea
+croplandcellshare <- calcOutput("CellAreaShare", 
+                                x = currentCroplandTotal, 
+                                aggregate = FALSE)
 
 # share potentially irrigated of total cell area
-irrigcellshare    <- avlArea / cellarea
-
+irrigcellshare    <- calcOutput("CellAreaShare", 
+                                x = avlArea, 
+                                aggregate = FALSE)
 ```
 
 # Current Irrigation
@@ -1309,54 +1293,31 @@ captured in our data set (IRR-UNSUS).
 
 ```{r ReadInCurrent, include=FALSE, echo=FALSE}
 # Input data
-input <- "shrCurrIrrigFulfilled"
+input <- "shrHumanUsesFulfilled"
 
 # Read in data
-x <- collapseNames(read.magpie(paste0(inputdatapath, input, ".mz"))[, year, "off.ssp2"])
+x <- collapseNames(read.magpie(paste0(inputdatapath, input, ".mz"))[, year, "off.ssp2.committedAg"])
 
 # Exclude very small cropland areas
 x[croplandcellshare < 0.01] <- NA
 
-# Transform to raster for plotting
-x1 <- .toolRasterTransform(x)
-
-# Plot settings
+legendtitle  <- "Fulfilled Share"
+legendlimit  <- c(0, 1)
+legendbreaks <- seq(0, 1, 0.1)
 legendcolor  <- c("#7f0000", "#b30000", "#d7301f", "#ef6548", "#fc8d59",
                   "#fdbb84", "#fdd49e", "#fee8c8", "#fff7ec", "#045a8d")
 colNA        <- "#d9d9d9"
-legendlimit  <- c(0, 1)
-legendbreaks <- seq(0, 1, 0.1)
-
+ylim         <- c(-6500000, 8300000)
+xlim         <- c(-12577316, 15581284)
 
 # Plot and save
-pdf(paste0(outputdatapath, input, ".pdf"), width = 26, height = 15)
-
-  # Main plot
-  plot(landMask, col = "white", border = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
-  plot(x1, border = "white", ylim = ylim, xlim = xlim,  asp = NA, axes = FALSE, 
-       legend = FALSE,
-       col = legendcolor,
-       colNA = colNA,
-       breaks = legendbreaks,
-       add = T)
-  plot(landMask, col = "white", border = "white", ylim = ylim, xlim = xlim,  asp = NA, axes = FALSE, add = T)
-  plot(worldCountries, ylim = ylim, xlim = xlim,  asp = NA, axes = FALSE, add = T)
-  
-  # Legend
-    plot(x1,
-       legend.only   = TRUE,
-       horizontal    = TRUE,
-       col           = legendcolor,
-       breaks        = legendbreaks,
-       colNA         = colNA,
-       legend.args   = list(text = "Fulfilled Share", side = 3, font = 1, line = 2, cex = 4),
-       axis.args     = list(cex.axis = 4, at = legendbreaks, line = 0, tick = FALSE, hadj = 0.5, padj = 0.5),
-       smallplot     = c(0.4, 0.75, 0.05, 0.1),
-       add = T)
-
-
-dev.off()
-
+plotMap(x = x,
+        name = input,
+        outputfolder = outputdatapath,
+        ylim = ylim, xlim = xlim,
+        legendcolor = legendcolor, colNA = colNA,
+        legendlimit = legendlimit, legendbreaks = legendbreaks,
+        legendname = legendtitle)
 ```
 
 
@@ -1368,7 +1329,7 @@ on current cropland (b) and
 potential cropland (c) 
 compared to actually irrigated areas according to LUH (a). 
 
-```{r PlotTechnical, include=FALSE, echo=FALSE}
+```{r PlotTechnical, include = FALSE, echo = FALSE}
 filename <- "IrrigAreaOverview"
 
 # Area correction (only show areas where there is available irrigation area > 1% of cell size)
@@ -1387,19 +1348,28 @@ b[b == 0] <- NA
 c[c == 0] <- NA
 
 # Legend range adjustment (cell share rather than Mha)
-a <- a / cellarea
-b <- b / cellarea
-c <- c / cellarea
+a <- calcOutput("CellAreaShare", x = a, 
+                aggregate = FALSE)
+b <- calcOutput("CellAreaShare", x = b, 
+                aggregate = FALSE)
+c <- calcOutput("CellAreaShare", x = c, 
+                aggregate = FALSE)
 legendtitle  <- "Cellshare"
 legendbreaks <- seq(0, 1, 0.125)
 legendcolor  <- c("#e5f5e0", "#c7e9c0", "#a1d99b", 
                   "#74c476", "#41ab5d", "#238b45", "#006d2c", "#00441b")
 
 # Transform magpie object to raster object
-a <- .toolRasterTransform(x = a)
-b <- .toolRasterTransform(x = b)
-c <- .toolRasterTransform(x = c)
+a <- mrwaterplots::toolRasterTransform(x = a)
+b <- mrwaterplots::toolRasterTransform(x = b)
+c <- mrwaterplots::toolRasterTransform(x = c)
 
+# Get land mask and country borders
+tmp            <- mrwaterplots::toolPrepareLandMask()
+landMask       <- tmp$landMask
+worldCountries <- tmp$worldCountries
+
+### Plot 3 graphs in one jpeg
 jpeg(paste0(outputdatapath, filename, ".jpeg"), width = 8, height = 13.5, units = "in", res = 400)
 
 par(mar = c(3, 2, 2, 2), 
@@ -1463,7 +1433,7 @@ dev.off()
 We provide the economic irrigation maps and curves for the 
 POT-SUS as well as the POT-UNSUS scenarios.
 
-```{r ReadInEconomic, include=FALSE, echo=FALSE}
+```{r ReadInEconomic, include = FALSE, echo = FALSE}
 low    <- 0
 middle <- 300
 high   <- 600
@@ -1529,18 +1499,25 @@ x500sus[x500sus == 0]   <- NA
 x1000sus[x1000sus == 0] <- NA
 
 # Legend range adjustment
-x0Share    <- x0 / cellarea
-x500Share  <- x500 / cellarea
-x1000Share <- x1000 / cellarea
+x0Share    <- calcOutput("CellAreaShare", x = x0,
+                aggregate = FALSE)
+x500Share  <- calcOutput("CellAreaShare", x = x500,
+                aggregate = FALSE)
+x1000Share <- calcOutput("CellAreaShare", x = x1000,
+                aggregate = FALSE)
 
-x0Sharesus    <- x0sus / cellarea
-x500Sharesus  <- x500sus / cellarea
-x1000Sharesus <- x1000sus / cellarea
+x0Sharesus    <- calcOutput("CellAreaShare", x = x0sus,
+                aggregate = FALSE)
+x500Sharesus  <- calcOutput("CellAreaShare", x = x500sus,
+                aggregate = FALSE)
+x1000Sharesus <- calcOutput("CellAreaShare", x = x1000sus,
+                aggregate = FALSE)
 
 legendtitle  <- "Cellshare"
 legendbreaks <- seq(0, 1, 0.25)
 
 ### Create and save Legend plot ###
+# Areas that would only be irrigated in lowest yield gain class (unsustainable)
 x0_000_025 <- sum(x0[x0Share<0.25                & is.na(x500) & is.na(x1000)], na.rm = TRUE)
 x0_025_050 <- sum(x0[x0Share>=0.25 & x0Share<0.5 & is.na(x500) & is.na(x1000)], na.rm = TRUE)
 x0_050_075 <- sum(x0[x0Share>=0.5 & x0Share<0.75 & is.na(x500) & is.na(x1000)], na.rm = TRUE)
@@ -1556,6 +1533,7 @@ x1000_025_050 <- sum(x1000[x1000Share>=0.25 & x1000Share<0.5], na.rm = TRUE)
 x1000_050_075 <- sum(x1000[x1000Share>=0.5 & x1000Share<0.75], na.rm = TRUE)
 x1000_075_010 <- sum(x1000[x1000Share>=0.75], na.rm = TRUE)
 
+# Areas that would only be irrigated in lowest yield gain class (sustainable)
 x0_000_025sus <- sum(x0sus[x0Sharesus<0.25                   & is.na(x500sus) & is.na(x1000sus)], na.rm = TRUE)
 x0_025_050sus <- sum(x0sus[x0Sharesus>=0.25 & x0Sharesus<0.5 & is.na(x500sus) & is.na(x1000sus)], na.rm = TRUE)
 x0_050_075sus <- sum(x0sus[x0Sharesus>=0.5 & x0Sharesus<0.75 & is.na(x500sus) & is.na(x1000sus)], na.rm = TRUE)
@@ -1596,9 +1574,9 @@ x500Share[irrigcellshare == 0]  <- NA
 x1000Share[irrigcellshare == 0] <- NA
 
 # Transform magpie object to raster object
-x0Share        <- .toolRasterTransform(x0Share)
-x500Share      <- .toolRasterTransform(x500Share)
-x1000Share     <- .toolRasterTransform(x1000Share)
+x0Share        <- mrwaterplots::toolRasterTransform(x0Share)
+x500Share      <- mrwaterplots::toolRasterTransform(x500Share)
+x1000Share     <- mrwaterplots::toolRasterTransform(x1000Share)
 
 ### Create and save Map plot for UNSUS scenario ###
 jpeg(paste0(outputdatapath, filename, "_a.jpeg"), width = 200, height = 120, units = "mm", res = 400)
@@ -1647,9 +1625,9 @@ x500Sharesus[irrigcellshare == 0]  <- NA
 x1000Sharesus[irrigcellshare == 0] <- NA
 
 # Transform magpie object to raster object
-x0Sharesus        <- .toolRasterTransform(x0Sharesus)
-x500Sharesus      <- .toolRasterTransform(x500Sharesus)
-x1000Sharesus     <- .toolRasterTransform(x1000Sharesus)
+x0Sharesus        <- mrwaterplots::toolRasterTransform(x0Sharesus)
+x500Sharesus      <- mrwaterplots::toolRasterTransform(x500Sharesus)
+x1000Sharesus     <- mrwaterplots::toolRasterTransform(x1000Sharesus)
 
 ### Create and save Map plot for SUS scenario ###
 jpeg(paste0(outputdatapath, filename, "_b.jpeg"), width = 200, height = 120, units = "mm", res = 400)
@@ -1856,7 +1834,8 @@ dev.off()
 ```{r ProtectedAreaReadin, include=TRUE, echo=FALSE}
 potlandUnprotect <- read.magpie(paste0(inputdatapath, "avlIrrigarea_pot.mz"))
 
-print(paste0("Non-protected areas that are suitable for cropland activities: ", dimSums(potlandUnprotect, dim = 1)))
+print(paste0("Non-protected areas that are suitable for cropland activities: ",
+             round(dimSums(potlandUnprotect, dim = 1), digits = 1)))
 ```
 
 The Protected Areas map shows the share of each grid cell that is protected following the Half Earth scenario. 
@@ -1868,7 +1847,10 @@ protectSCEN <- "HalfEarth"
 protectArea <- collapseNames(read.magpie(paste0(inputdatapath, "protectedAreas.mz"))[, , protectSCEN])
 
 # Cell share that is protected
-protectArea <- protectArea / cellarea
+protectArea <-  calcOutput("CellAreaShare", x = protectArea, 
+                aggregate = FALSE)
+protectArea[protectArea < 0] <- 0
+protectArea[protectArea > 1] <- 1
 
 # Plot Fulfilled Share
 legendtitle  <- "Protected Share"
@@ -1877,7 +1859,7 @@ legendcolor  <- c("#FFFFFF", "#d9f0a3", "#addd8e",
                   "#78c679", "#41ab5d", "#238443", "#006837", "#004529")
 
 # Transform magpie object to raster object
-protectArea <- .toolRasterTransform(protectArea)
+protectArea <- mrwaterplots::toolRasterTransform(protectArea)
 # correct rounding
 protectArea[protectArea < 0] <- 0
 protectArea[protectArea > 1] <- 1
@@ -1934,30 +1916,31 @@ yieldGain <- yieldGain_GLO
 # Area masks (ACT, CUR, POT with sufficient water)
 yldGainACT   <- dimSums(yieldGain * IrrigAreaEconIRRUNSUS[,,"0.off"], dim = 1) / dimSums(IrrigAreaEconIRRUNSUS[,,"0.off"], dim = 1)
 yldGainCUR   <- dimSums(yieldGain * IrrigAreaEconCURUNSUS[,,"0.off"], dim = 1) / dimSums(IrrigAreaEconCURUNSUS[,,"0.off"], dim = 1)
-yldGainCURrf <- dimSums(yieldGain * (collapseNames(IrrigAreaEconCURUNSUS[,,"0.off"])-LUHirrigated), dim = 1) /
-                            dimSums((collapseNames(IrrigAreaEconCURUNSUS[,,"0.off"])-LUHirrigated), dim = 1)
+yldGainCURrf <- dimSums(yieldGain * (collapseNames(IrrigAreaEconCURUNSUS[,,"0.off"])-currentCroplandIrrigated), dim = 1) /
+                            dimSums((collapseNames(IrrigAreaEconCURUNSUS[,,"0.off"])-currentCroplandIrrigated), dim = 1)
 yldGainPOT    <- dimSums(yieldGain * IrrigAreaEconPOTUNSUS[,,"0.off"], dim = 1) / dimSums(IrrigAreaEconPOTUNSUS[,,"0.off"], dim = 1)
 yldGainPOTsus <- dimSums(yieldGain * IrrigAreaEconPOTSUS[,,"0.off"], dim = 1) / dimSums(IrrigAreaEconPOTSUS[,,"0.off"], dim = 1)
 
 # Area masks (ACT, CUR, POT)
-tmpIrrig    <- dimSums(yieldGain * LUHirrigated, dim = 1) / dimSums(LUHirrigated, dim = 1)
-tmpCropland <- dimSums(yieldGain * LUHtotal, dim = 1) / dimSums(LUHtotal, dim = 1)
-tmpRainfed  <- dimSums(yieldGain * (LUHtotal-LUHirrigated), dim = 1) / dimSums((LUHtotal-LUHirrigated), dim = 1)
+tmpIrrig    <- dimSums(yieldGain * currentCroplandIrrigated, dim = 1) / dimSums(currentCroplandIrrigated, dim = 1)
+tmpCropland <- dimSums(yieldGain * currentCroplandTotal, dim = 1) / dimSums(currentCroplandTotal, dim = 1)
+tmpRainfed  <- dimSums(yieldGain * (currentCroplandTotal-currentCroplandIrrigated), dim = 1) / dimSums((currentCroplandTotal-currentCroplandIrrigated), dim = 1)
 tmpPotTotal <- dimSums(yieldGain * yieldgainareaPOTunsus[,,"0"], dim = 1) / dimSums(yieldgainareaPOTunsus[,,"0"], dim = 1)
 tmpPotSus   <- dimSums(yieldGain * yieldgainareaPOTsus[,,"0"], dim = 1) / dimSums(yieldgainareaPOTsus[,,"0"], dim = 1)
 
 # In-text numbers (global)
-writeLines(paste0("The average yield  gain on currently irrigated areas is ", round(tmpIrrig, digits = 1), "USD per hectare.", 
-"\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield gain on currently irrigated areas is ", round(yldGainACT),                 
-"\nThe average yield gain on current cropland is ", round(mean(tmpCropland), digits = 1), "USD per hectare.",
-"\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield gain on current croparea is ", round(yldGainCUR),  
-"\nThe average yield gain on current cropland that is currently not under irrigation, \nbut would be irrigated according to our algorithm is ", round(mean(yldGainCURrf), digits = 1), "USD per hectare.",
-"\nThe average yield gain on currently rainfed cropland is ", round(mean(tmpRainfed), digits = 1), "USD per hectare.",
-"\nThe average yield gain on total potential cropland is ", round(mean(tmpPotTotal), digits = 1), ".",
-"\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield gain on potential cropland areas is ", round(yldGainPOT),
-"\nThe average yield gain on potential (unprotected) cropland is ", round(mean(tmpPotSus), digits = 1), ".",
-"\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield gain on potential cropland areas is ", round(yldGainPOTsus)))
-
+writeLines(paste0(
+  "The average yield  gain on currently irrigated areas is ", round(tmpIrrig, digits = 1), "USD per hectare.", 
+  "\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield gain on currently irrigated areas is ", round(yldGainACT),                 
+  "\nThe average yield gain on current cropland is ", round(mean(tmpCropland), digits = 1), "USD per hectare.",
+  "\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield gain on current croparea is ", round(yldGainCUR),  
+  "\nThe average yield gain on current cropland that is currently not under irrigation, \nbut would be irrigated according to our algorithm is ", round(mean(yldGainCURrf), digits = 1), "USD per hectare.",
+  "\nThe average yield gain on currently rainfed cropland is ", round(mean(tmpRainfed), digits = 1), "USD per hectare.",
+  "\nThe average yield gain on total potential cropland is ", round(mean(tmpPotTotal), digits = 1), ".",
+  "\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield gain on potential cropland areas is ", round(yldGainPOT),
+  "\nThe average yield gain on potential (unprotected) cropland is ", round(mean(tmpPotSus), digits = 1), ".",
+  "\nTaking only those areas into account where sufficient local water resources are available \nafter optimization, the yield gain on potential cropland areas is ", round(yldGainPOTsus)
+  ))
 
 # Spearman correlation
 corrAandB <- round(cor.test(yieldGain_GLO, yieldGain_ISO, method = "spearman")$estimate, digits = 4)
@@ -1971,126 +1954,168 @@ yieldGain_const[yieldGain_const > 1200] <- 1200
 
 pdf(paste0(outputdatapath, "Histograms_yieldvaluegain", ".pdf"), height = 15, width = 29.7, paper = "a4r")
 par(mfrow = c(1, 3), mar = c(5,8,3,2))
-weighted.hist(x = yieldGain_GLO, w = yieldgainareaPOTunsus[,,"0"],
-              breaks = c(0, 200, 400, 600, 800, 1000, 1200), ylim = c(0, 3000), col = "#fcbba1", 
-              main = "(a) Global average commodity prices\n", ylab = "Yield gain area (in Mha)\n", 
-              cex.lab = 2, cex.axis = 1.5, cex.names = 6, cex.main = 1.5)
-weighted.hist(x = yieldGain_ISO, w = yieldgainareaPOTunsus[,,"0"], 
-              breaks = c(0, 200, 400, 600, 800, 1000, 1200), ylim = c(0, 3000), col = "#fcbba1", 
-              main = "(b) Country-level commodity prices\n", ylab = "", 
-              cex.axis = 1.5, cex.names = 6, cex.main = 1.5)
+weights::wtd.hist(x = yieldGain_GLO, weight = yieldgainareaPOTunsus[,,"0"],
+              breaks = c(0, 200, 400, 600, 800, 1000, 1200), col = "#fcbba1", ylim = c(0, 3000),
+              main = "(a) Global average commodity prices\n", ylab = "Yield gain area (in Mha)",
+              xlab = "")
+weights::wtd.hist(x = yieldGain_ISO, w = yieldgainareaPOTunsus[,,"0"], 
+              breaks = c(0, 200, 400, 600, 800, 1000, 1200), col = "#fcbba1", ylim = c(0, 3000),
+              main = "(b) Country-level commodity prices\n", ylab = "", xlab = "")
 text(x = 800, y = 2500, paste0("Spearman's rho: \n", corrAandB), cex = 2)
-weighted.hist(x = yieldGain_const, w = yieldgainareaPOTunsus[,,"0"], 
-              breaks = c(0, 200, 400, 600, 800, 1000, 1200), ylim = c(0, 3000), col = "#fcbba1", 
-              main = "(c) Constant global price\n", ylab = "", 
-              cex.axis = 1.5, cex.names = 6, cex.main = 1.5)
+weights::wtd.hist(x = yieldGain_const, w = yieldgainareaPOTunsus[,,"0"], 
+              breaks = c(0, 200, 400, 600, 800, 1000, 1200), col = "#fcbba1", ylim = c(0, 3000),
+              main = "(c) Constant global price\n", ylab = "", xlab = "")
 text(x = 800, y = 2500, paste0("Spearman's rho: \n", corrAandC), cex = 2)
 par(mfrow = c(1, 1))
 dev.off()
 
+```
 
-# Legend
-legendbreaks <- c(0, 100, 300, 500, 700, 900, 1000)
-legendbreaks <- c(0, 200, 400, 600, 800, 1000, 1200)
-legendcolor  <- c("#FFFFFF", "#fdbb84", "#fc8d59", "#d7301f", "#b30000", "#7f0000")
 
+
+
+
+```{r AverageYield, include = TRUE, echo = FALSE}
+
+# (Rainfed and irrigated) Yield in USD/ha with global average prices
+yieldsValued   <- read.magpie(paste0(inputdatapath, "yieldsValued.mz"))
+
+# Current cropland
+rfYield_CURrf <- ifelse(dimSums(collapseNames(currentCroparea[, , "rainfed"]), dim = "crop") > 0,
+                          dimSums(collapseNames(yieldsValued[, , "rainfed"]) * collapseNames(currentCroparea[, , "rainfed"]),
+                                  dim = "crop") / dimSums(collapseNames(currentCroparea[, , "rainfed"]), dim = "crop"),
+                        0)
+irYield_CURir <- ifelse(dimSums(collapseNames(currentCroparea[, , "irrigated"]), dim = "crop") > 0, 
+                          dimSums(collapseNames(yieldsValued[, , "irrigated"]) * collapseNames(currentCroparea[, , "irrigated"]),
+                                  dim = "crop") / dimSums(collapseNames(currentCroparea[, , "irrigated"]), dim = "crop"),
+                        0)
+rfYield_CUR <- ifelse(dimSums(currentCropland, dim = 3) > 0, 
+                        dimSums(collapseNames(yieldsValued[, , "rainfed"]) * dimSums(currentCroparea, dim = "irrigation"),
+                                dim = "crop") / dimSums(currentCropland, dim = 3),
+                      0)
+irYield_CUR <- ifelse(dimSums(currentCropland, dim = 3) > 0,
+                        dimSums(collapseNames(yieldsValued[, , "irrigated"]) * dimSums(currentCroparea, dim = "irrigation"),
+                                dim = "crop") / dimSums(currentCropland, dim = 3),
+                      0)
+
+# Potential cropland
+potentialCroparea <- cropareaShr * avlArea
+rfYield_POT <- ifelse(dimSums(potentialCroparea, dim = "crop") > 0,
+                        dimSums(collapseNames(yieldsValued[, , "rainfed"]) * potentialCroparea,
+                                dim = "crop") / dimSums(potentialCroparea, dim = "crop"),
+                      0)
+irYield_POT <- ifelse(dimSums(potentialCroparea, dim = "crop") > 0,
+                        dimSums(collapseNames(yieldsValued[, , "irrigated"]) * potentialCroparea,
+                                dim = "crop") / dimSums(potentialCroparea, dim = "crop"),
+                      0)
+
+# Report averages
+writeLines(paste0(
+                  # Average rainfed yield on all current cropland 
+                  "The average yield under rainfed conditions on all of current cropland is ", 
+                  round(dimSums(rfYield_CUR * dimSums(currentCropland, dim = "irrigation"), dim = 1) / dimSums(dimSums(currentCropland, dim = "irrigation"), dim = 1), digits = 1),
+                  " USD per hectare.", 
+                  # Average rainfed yield on all current rainfed cropland 
+                  "\nThe average yield under rainfed conditions on currently rainfed cropland is ", 
+                  round(dimSums(rfYield_CURrf * currentCropland[, , "rainfed"], dim = 1) / dimSums(currentCropland[, , "rainfed"], dim = 1), digits = 1),
+                  " USD per hectare.",
+                  # Average rainfed yield on all current irrigated cropland 
+                  "\nThe average yield under rainfed conditions on currently irrigated cropland is ", 
+                  round(dimSums(rfYield_CURrf * currentCropland[, , "irrigated"], dim = 1) / dimSums(currentCropland[, , "irrigated"], dim = 1), digits = 1),
+                  " USD per hectare.",
+                  # Average irrigated yield on all current cropland 
+                  "\nThe average yield under irrigated conditions on all of current cropland is ", 
+                  round(dimSums(irYield_CUR * dimSums(currentCropland, dim = "irrigation"), dim = 1) / dimSums(dimSums(currentCropland, dim = "irrigation"), dim = 1), digits = 1),
+                  " USD per hectare.", 
+                  # Average irrigated yield on irrigated cropland
+                  "\nThe average yield under irrigated conditions on currently rainfed cropland is ", 
+                  round(dimSums(irYield_CURir * currentCropland[, , "rainfed"], dim = 1) / dimSums(currentCropland[, , "rainfed"], dim = 1), digits = 1),
+                  " USD per hectare.",
+                  # Average irrigated yield on irrigated cropland
+                  "\nThe average yield under irrigated conditions on currently irrigated cropland is ", 
+                  round(dimSums(irYield_CURir * currentCropland[, , "irrigated"], dim = 1) / dimSums(currentCropland[, , "irrigated"], dim = 1), digits = 1),
+                  " USD per hectare."
+                  ))
+
+# Common arguments:
+legendtitle  <- "USD per ha"
+colNA        <- "#d9d9d9"
+ylim         <- c(-6500000, 8300000)
+xlim         <- c(-12577316, 15581284)
+
+# Rainfed Yield
+legendbreaksA <- c(0, 250, 500, 750, 1000, 2000, 3000, 4000, 5000, 6000)
 # Transform magpie object to raster object
-yieldGain_GLO   <- .toolRasterTransform(yieldGain_GLO)
-yieldGain_ISO   <- .toolRasterTransform(yieldGain_ISO)
-yieldGain_const <- .toolRasterTransform(yieldGain_const)
+rfYield_POT <- mrwaterplots::toolRasterTransform(x = rfYield_POT)
+rfYield_POT[rfYield_POT < min(legendbreaksA)]  <- min(legendbreaksA)
+rfYield_POT[rfYield_POT >= (max(legendbreaksA)-1)]  <- max(legendbreaksA)-1
 
-yieldGain_GLO[yieldGain_GLO < 0]     <- 0
-yieldGain_GLO[yieldGain_GLO >= 1200] <- 1199
+# Yield gain
+legendbreaksB <- c(0, 200, 400, 600, 800, 1000, 1200)
+# Transform magpie object to raster object
+yieldGain_GLO <- mrwaterplots::toolRasterTransform(x = yieldGain_GLO)
+yieldGain_GLO[yieldGain_GLO < min(legendbreaksB)]  <- min(legendbreaksB)
+yieldGain_GLO[yieldGain_GLO >= (max(legendbreaksB)-1)]  <- max(legendbreaksB)-1
 
-yieldGain_ISO[yieldGain_ISO < 0]     <- 0
-yieldGain_ISO[yieldGain_ISO >= 1200] <- 1199
+jpeg(paste0(outputdatapath, "Yields", ".jpeg"), width = 8, height = 9, units = "in", res = 400)
 
-yieldGain_const[yieldGain_const < 0]     <- 0
-yieldGain_const[yieldGain_const >= 1200] <- 1199
+par(mar = c(3, 2, 2, 2), 
+    mfrow = c(2, 1), 
+    bg = "transparent")
 
-
-# Global average prices:
-jpeg(paste0(outputdatapath, "Yields", ".jpeg"), width = 8, height = 4.5, units = "in", res = 400)
-
+### Graph 1: Rainfed Yield
 plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
-plot(yieldGain_GLO, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE,
+plot(rfYield_POT, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE,
      legend       = FALSE,
-     col          = legendcolor,
-     breaks       = legendbreaks,
+     col          = c("#fff7fb", "#ece2f0", "#d0d1e6", "#a6bddb", "#67a9cf", "#3690c0", "#02818a", "#016c59", "#014636"),
+     breaks       = legendbreaksA,
      colNA        = colNA,
+     add          = TRUE)
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
+plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = TRUE)
+title("(a) Average rainfed yield", outer = FALSE, cex.main = 2, line = 0.5)
+  # Legend
+  plot(rfYield_POT,
+       legend.only   = TRUE,
+       horizontal    = TRUE,
+       col          = c("#fff7fb", "#ece2f0", "#d0d1e6", "#a6bddb", "#67a9cf", "#3690c0", "#02818a", "#016c59", "#014636"),
+       breaks        = legendbreaksA,
+       colNA         = colNA,
+       legend.args   = list(text = legendtitle,
+                           side = 3, font = 1, line = 0.5, cex = 1),
+       axis.args     = list(cex.axis = 0.8, at = c(0, 1000, 2000, 3000, 4000, 5000, 6000),
+                           line = 0, tick = FALSE, hadj = 0.4, padj = -1.5),
+       smallplot     = c(0.4, 0.75, 0.1, 0.15),
+       add = TRUE)
+
+### Graph 2: Yield gain
+plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
+plot(yieldGain_GLO, ylim = ylim, xlim = xlim,
+     legend       = FALSE,
+     col          = c("#fcfbfd", "#bcbddc", "#807dba", "#6a51a3", "#54278f", "#3f007d"),
+     breaks       = legendbreaksB,
+     colNA        = "#d9d9d9",
      add          = T)
 plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
-plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
-
-# Legend
-plot(yieldGain_GLO, bg = "transparent",
-     legend.only   = TRUE,
-     horizontal    = TRUE,
-     col           = legendcolor,
-     breaks        = legendbreaks,
-     colNA         = "transparent",
-     legend.args   = list(text = "USD per ha", side = 3, font = 1, line = 0.5, cex = 1),
-     axis.args     = list(cex.axis = 0.8, at = legendbreaks, line = 0, tick = FALSE, hadj = 0.4, padj = -1.5),
-     smallplot     = c(0.4, 0.75, 0.1, 0.15),
-     add = T)
-
-dev.off()
-
-
-# Global average prices:
-jpeg(paste0(outputdatapath, "Yields_iso", ".jpeg"), width = 8, height = 4.5, units = "in", res = 400)
-
-plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
-plot(yieldGain_ISO, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE,
-     legend       = FALSE,
-     col          = legendcolor,
-     breaks       = legendbreaks,
-     colNA        = colNA,
-     add          = T)
-plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
-plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
-
-# Legend
-plot(yieldGain_ISO, bg = "transparent",
-     legend.only   = TRUE,
-     horizontal    = TRUE,
-     col           = legendcolor,
-     breaks        = legendbreaks,
-     colNA         = "transparent",
-     legend.args   = list(text = "USD per ha", side = 3, font = 1, line = 0.5, cex = 1),
-     axis.args     = list(cex.axis = 0.8, at = legendbreaks, line = 0, tick = FALSE, hadj = 0.4, padj = -1.5),
-     smallplot     = c(0.4, 0.75, 0.1, 0.15),
-     add = T)
-
-dev.off()
-
-
-# Global average prices:
-jpeg(paste0(outputdatapath, "Yields_constant", ".jpeg"), width = 8, height = 4.5, units = "in", res = 400)
-
-plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE)
-plot(yieldGain_const, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE,
-     legend       = FALSE,
-     col          = legendcolor,
-     breaks       = legendbreaks,
-     colNA        = colNA,
-     add          = T)
-plot(landMask, border = "white", col = "white", ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
-plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = T)
-
-# Legend
-plot(yieldGain_const, bg = "transparent",
-     legend.only   = TRUE,
-     horizontal    = TRUE,
-     col           = legendcolor,
-     breaks        = legendbreaks,
-     colNA         = "transparent",
-     legend.args   = list(text = "USD per ha", side = 3, font = 1, line = 0.5, cex = 1),
-     axis.args     = list(cex.axis = 0.8, at = legendbreaks, line = 0, tick = FALSE, hadj = 0.4, padj = -1.5),
-     smallplot     = c(0.4, 0.75, 0.1, 0.15),
-     add = T)
+plot(worldCountries, ylim = ylim, xlim = xlim, asp = NA, axes = FALSE, add = TRUE)
+title("(b) Yield gain", outer = FALSE, cex.main = 2, line = 0.5)
+  # Legend
+  plot(yieldGain_GLO,
+       legend.only   = TRUE,
+       horizontal    = TRUE,
+       col           = c("#fcfbfd", "#bcbddc", "#807dba", "#6a51a3", "#54278f", "#3f007d"),
+       breaks        = legendbreaksB,
+       colNA         = colNA,
+       legend.args   = list(text = legendtitle,
+                           side = 3, font = 1, line = 0.5, cex = 1),
+       axis.args     = list(cex.axis = 0.8, at = legendbreaksB,
+                           line = 0, tick = FALSE, hadj = 0.4, padj = -1.5),
+       smallplot     = c(0.4, 0.75, 0.1, 0.15),
+       add = TRUE)
 
 dev.off()
 
 ```
+
+
 
